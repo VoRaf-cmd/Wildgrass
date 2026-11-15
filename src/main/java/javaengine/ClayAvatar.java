@@ -5,14 +5,18 @@ import org.joml.Matrix4f;
 import java.nio.FloatBuffer;
 
 final class ClayAvatar implements AutoCloseable {
+    static final int BONE_COUNT = 13;
+    static final int SPINE = 12;
+    private static final float HIP = .83f, KNEE = .47f, ANKLE = .107f;
+    private static final float HIP_BACK = .12f;
     private final ObjModel skin = new ClayMesh().build();
     private final ObjModel whites = sphere(0xFFF1D3);
     private final ObjModel iris = sphere(0xAA713C);
     private final ObjModel pupil = sphere(0x22191D);
     private final ObjModel glint = sphere(0xFFFAEE);
     private final ObjModel mouth = sphere(0x563039);
-    private final Matrix4f[] bones = new Matrix4f[10];
-    private final float[] palette = new float[160];
+    private final Matrix4f[] bones = new Matrix4f[BONE_COUNT];
+    private final float[] palette = new float[BONE_COUNT * 16];
     private final Matrix4f face = new Matrix4f();
     private final Matrix4f feature = new Matrix4f();
 
@@ -22,18 +26,19 @@ final class ClayAvatar implements AutoCloseable {
 
     void draw(SceneShader shader, Matrix4f body, float pitch, float step, float sway, float swing,
               float rightArm, float leftArm, float slash, float alarm, float time,
-              boolean aiming, boolean guest, FloatBuffer buffer) {
+              float crouch, boolean aiming, boolean guest, FloatBuffer buffer) {
         float squash = 0.022f * sway - 0.028f * swing + 0.042f * alarm;
-        bones[0].scaling(1 - squash * .5f, 1 + squash, 1 - squash * .5f);
-        joint(1, 0, 0, 1.47f, 0, pitch * 0.76f - alarm * .18f, 0, sway * .048f);
-        joint(2, 0, -.267f, 1.34f, 0, leftArm, -.08f * swing, .09f * alarm);
+        squash *= 1 - crouch * .8f;
+        bones[0].translation(0, -FirstPersonCamera.CROUCH_DROP * crouch, HIP_BACK * crouch)
+                .scale(1 - squash * .5f, 1 + squash, 1 - squash * .5f);
+        joint(SPINE, 0, 0, HIP, 0, -crouch * .24f, 0, 0);
+        joint(1, SPINE, 0, 1.47f, 0, pitch * 0.76f - alarm * .18f + crouch * .20f, 0, sway * .048f);
+        joint(2, SPINE, -.267f, 1.34f, 0, leftArm + crouch * .20f, -.08f * swing, .09f * alarm);
         joint(3, 2, -.355f, 1.09f, 0, aiming ? .20f : .13f + .08f * step, 0, 0);
-        joint(4, 0, .267f, 1.34f, 0, rightArm, slash, -.10f * alarm);
+        joint(4, SPINE, .267f, 1.34f, 0, rightArm + crouch * .20f, slash, -.10f * alarm);
         joint(5, 4, .355f, 1.09f, 0, aiming ? .09f : .16f + swing * .20f, 0, 0);
-        joint(6, 0, -.14f, .83f, 0, -step * .58f, 0, 0);
-        joint(7, 6, -.153f, .47f, 0, .60f * Math.max(0, step), 0, 0);
-        joint(8, 0, .14f, .83f, 0, step * .58f, 0, 0);
-        joint(9, 8, .153f, .47f, 0, .60f * Math.max(0, -step), 0, 0);
+        leg(6, 7, 10, -1, -step, crouch);
+        leg(8, 9, 11, 1, step, crouch);
         for (int i = 0; i < bones.length; i++) bones[i].get(palette, i * 16);
         shader.drawClay(skin, body, palette, guest ? 0xD27B50 : 0x9BA65A, buffer);
         face.set(body).mul(bones[1]);
@@ -42,6 +47,28 @@ final class ClayAvatar implements AutoCloseable {
 
     void grip(Matrix4f body, Matrix4f destination) {
         destination.set(body).mul(bones[5]).translate(.405f, .822f, -.062f);
+    }
+
+    private void leg(int thigh, int shin, int foot, int side, float step, float crouch) {
+        float upper = step * .58f;
+        float lower = .60f * Math.max(0, -step);
+        float footAngle = 0;
+        if (crouch > .001f) {
+            // Solve the thigh and shin toward an ankle planted at ground height.
+            float rise = HIP - ANKLE - FirstPersonCamera.CROUCH_DROP * crouch
+                    - Math.max(0, step) * .055f * crouch;
+            float forward = (HIP_BACK + step * .12f) * crouch;
+            float reach = (float) Math.hypot(rise, forward);
+            float a = HIP - KNEE, b = KNEE - ANKLE;
+            float hipBend = (float) Math.acos(Math.clamp((a * a + reach * reach - b * b) / (2 * a * reach), -1, 1));
+            float kneeBend = (float) Math.acos(Math.clamp((reach * reach - a * a - b * b) / (2 * a * b), -1, 1));
+            upper = upper * (1 - crouch) + (float) Math.atan2(forward, rise) + hipBend;
+            lower = lower * (1 - crouch) - kneeBend;
+            footAngle = -(upper + lower) * Math.clamp(crouch * 3, 0, 1);
+        }
+        joint(thigh, 0, side * .14f, HIP, 0, upper, 0, 0);
+        joint(shin, thigh, side * .153f, KNEE, 0, lower, 0, 0);
+        joint(foot, shin, side * .153f, ANKLE, 0, footAngle, 0, 0);
     }
 
     private void joint(int index, int parent, float x, float y, float z, float pitch, float yaw, float roll) {
@@ -101,7 +128,7 @@ final class ClayAvatar implements AutoCloseable {
     }
 
     private static ObjModel sphere(int color) {
-        final int rows = 9, sides = 16;
+        final int rows = 6, sides = 10;
         var mesh = new PlantMesh(rows * sides * 6);
         for (int row = 0; row < rows; row++) for (int side = 0; side < sides; side++) {
             if (row > 0) {

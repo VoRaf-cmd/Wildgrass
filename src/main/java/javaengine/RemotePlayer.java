@@ -25,6 +25,7 @@ final class RemotePlayer implements AutoCloseable {
     private float actionTime;
     private float time;
     private float alarm;
+    private float crouch;
     private Inventory.Item actionItem;
 
     void receive(NetworkPacket.Pose pose) {
@@ -34,6 +35,7 @@ final class RemotePlayer implements AutoCloseable {
             displayed.set(target);
             yaw = pose.yaw();
             pitch = pose.pitch();
+            crouch = crouchTarget();
         }
         visible = true;
     }
@@ -61,6 +63,7 @@ final class RemotePlayer implements AutoCloseable {
         time += delta;
         float distance = (float) Math.hypot(target.x - displayed.x, target.z - displayed.z);
         float blend = 1.0f - (float) Math.exp(-delta * 15.0f);
+        crouch += (crouchTarget() - crouch) * blend;
         yaw += (float) Math.IEEEremainder(pose.yaw() - yaw, Math.PI * 2) * blend;
         pitch += (pose.pitch() - pitch) * blend;
         if (distance > 3.0f) {
@@ -73,12 +76,17 @@ final class RemotePlayer implements AutoCloseable {
         stride = (stride + distance * blend * 8.0f) % 6.2831855f;
     }
 
+    private float crouchTarget() {
+        return (pose.flags() & NetworkPacket.CROUCHING) != 0 ? 1.0f : 0.0f;
+    }
+
     void draw(SceneShader shader, ObjModel[] items, ObjModel bowString, ObjModel lighterLid,
               FireVisuals fire, boolean guest, FloatBuffer buffer) {
         if (!visible) return;
         float step = (float) Math.sin(stride) * movement;
-        float bob = Math.abs(step) * 0.034f;
-        body.translation(displayed.x, displayed.y - 1.53f + bob, displayed.z).rotateY(-yaw);
+        float bob = Math.abs(step) * 0.034f * (1 - crouch * .82f);
+        body.translation(displayed.x, Terrain.height(displayed.x, displayed.z) + bob, displayed.z)
+                .rotateY(-yaw).scale(.92f, 1, .97f);
         int item = pose.item();
         Inventory.Item held = item >= 0 ? NetworkPacket.ITEMS[item] : null;
         boolean aiming = (pose.flags() & NetworkPacket.AIMING) != 0;
@@ -88,7 +96,7 @@ final class RemotePlayer implements AutoCloseable {
                 : pitch * .72f + (aiming ? 1.17f : .68f) + swing * .72f;
         float slash = actionItem == Inventory.Item.MACHETE ? swing * .82f : 0;
         avatar.draw(shader, body, pitch, step, (float) Math.sin(time * 3.1f), swing,
-                rightArm, leftArm, slash, alarm, time, aiming, guest, buffer);
+                rightArm, leftArm, slash, alarm, time, crouch, aiming, guest, buffer);
         if (item < 0 || items[item] == null) return;
         avatar.grip(body, part);
         part.rotateX(aiming ? -1.27f : -.84f);

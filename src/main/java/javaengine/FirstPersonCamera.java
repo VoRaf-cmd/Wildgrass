@@ -9,12 +9,18 @@ import static org.lwjgl.glfw.GLFW.*;
 final class FirstPersonCamera {
     private static final float WALK_SPEED = 2.6f;
     private static final float SPRINT_SPEED = 4.7f;
-    private final Vector3f position = new Vector3f(0.18f, 1.53f, 4.65f);
+    private static final float CROUCH_SPEED = 1.38f;
+    static final float EYE_HEIGHT = 1.53f;
+    static final float CROUCH_DROP = 0.43f;
+    private final Vector3f position = new Vector3f(0.18f, EYE_HEIGHT, 4.65f);
     private final Vector3f direction = new Vector3f();
     private float yaw;
     private float pitch = -0.085f;
     private boolean captured;
     private boolean sprinting;
+    private boolean crouching;
+    private float groundHeight;
+    private float crouchAmount;
     private boolean hasMousePosition;
     private double lastX;
     private double lastY;
@@ -111,16 +117,35 @@ final class FirstPersonCamera {
     }
 
     float update(long window, float seconds, Forest forest) {
-        float height = Terrain.height(position.x, position.z) + 1.53f;
-        position.y += (height - position.y) * (1.0f - (float) Math.exp(-seconds * 14.0f));
         if (!captured) {
-            sprinting = false;
-            return 0.0f;
+            return updateMovement(0, 0, false, false, seconds, forest);
         }
         int forward = pressed(window, GLFW_KEY_W) - pressed(window, GLFW_KEY_S);
         int right = pressed(window, GLFW_KEY_D) - pressed(window, GLFW_KEY_A);
         boolean sprint = pressed(window, GLFW_KEY_LEFT_SHIFT) != 0 || pressed(window, GLFW_KEY_RIGHT_SHIFT) != 0;
-        return move(forward, right, sprint, seconds, forest);
+        boolean crouch = pressed(window, GLFW_KEY_LEFT_CONTROL) != 0 || pressed(window, GLFW_KEY_RIGHT_CONTROL) != 0;
+        return updateMovement(forward, right, sprint, crouch, seconds, forest);
+    }
+
+    float updateMovement(int forward, int right, boolean sprint, boolean crouch, float seconds, Forest forest) {
+        crouching = crouch;
+        float traveled = move(forward, right, sprint, seconds, forest);
+        updateHeight(seconds);
+        return traveled;
+    }
+
+    private void updateHeight(float seconds) {
+        float blend = 1.0f - (float) Math.exp(-seconds * 14.0f);
+        crouchAmount += ((crouching ? 1.0f : 0.0f) - crouchAmount) * blend;
+        groundHeight += (Terrain.height(position.x, position.z) - groundHeight) * blend;
+        position.y = groundHeight + EYE_HEIGHT - CROUCH_DROP * crouchAmount;
+    }
+
+    void spawnAt(float x, float z) {
+        groundHeight = Terrain.height(x, z);
+        crouchAmount = 0;
+        crouching = false;
+        position.set(x, groundHeight + EYE_HEIGHT, z);
     }
 
     float move(int forward, int right, boolean sprint, float seconds, Forest forest) {
@@ -128,7 +153,9 @@ final class FirstPersonCamera {
         if (forward == 0 && right == 0) {
             return 0.0f;
         }
-        float distance = (sprint ? SPRINT_SPEED : WALK_SPEED) * seconds / (float) Math.hypot(forward, right);
+        sprint &= !crouching;
+        float speed = crouching ? CROUCH_SPEED : sprint ? SPRINT_SPEED : WALK_SPEED;
+        float distance = speed * seconds / (float) Math.hypot(forward, right);
         float sin = (float) Math.sin(yaw);
         float cos = (float) Math.cos(yaw);
         float x = Math.clamp(position.x + (sin * forward + cos * right) * distance, -Terrain.WALK_LIMIT, Terrain.WALK_LIMIT);
@@ -151,6 +178,8 @@ final class FirstPersonCamera {
     boolean sprinting() {
         return sprinting;
     }
+
+    boolean crouching() { return crouching; }
 
     void sensitivityScale(float scale) {
         sensitivityScale = scale;

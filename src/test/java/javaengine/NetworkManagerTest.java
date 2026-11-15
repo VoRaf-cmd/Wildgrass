@@ -58,14 +58,15 @@ final class NetworkManagerTest {
             host.startHost(port);
             client.connectToHost("127.0.0.1", port);
             for (int i = 0; i < 8; i++) {
-                client.update(.05f, eye, 1.2f, -0.4f, Inventory.Item.DYNAMITE, NetworkPacket.AIMING);
+                client.update(.05f, eye, 1.2f, -0.4f, Inventory.Item.DYNAMITE,
+                        NetworkPacket.AIMING | NetworkPacket.CROUCHING);
                 host.update(.05f, eye);
             }
             var pose = host.remotePose();
             assertEquals(1.2f, pose.yaw(), .001f);
             assertEquals(-0.4f, pose.pitch(), .001f);
             assertEquals(Inventory.Item.DYNAMITE.ordinal(), pose.item());
-            assertEquals(NetworkPacket.AIMING, pose.flags());
+            assertEquals(NetworkPacket.AIMING | NetworkPacket.CROUCHING, pose.flags());
 
             client.action(NetworkPacket.Kind.DYNAMITE, eye, direction, 0);
             client.action(NetworkPacket.Kind.BLAST, blastPoint, null, 0);

@@ -18,7 +18,7 @@ final class SceneShader implements AutoCloseable {
             uniform mat4 viewProjection;
             uniform mat4 model;
             uniform bool skinned;
-            uniform mat4 bones[10];
+            uniform mat4 bones[%d];
             uniform vec3 clayTint;
             uniform int vegetation;
             uniform float plantHeight;
@@ -78,7 +78,7 @@ final class SceneShader implements AutoCloseable {
                 bladeGrowth = growth;
                 patchPosition = position.xz;
             }
-            """;
+            """.formatted(ClayAvatar.BONE_COUNT);
 
     private static final String FRAGMENT = """
             #version 330 core

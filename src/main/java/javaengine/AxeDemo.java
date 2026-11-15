@@ -270,8 +270,9 @@ public final class AxeDemo {
                     case NONE -> { }
                 }
                 NetworkManager.Mode previousMode = network.mode();
+                float traveled = camera.update(window, delta, forest);
                 var equipped = inventory.equipped();
-                int flags = 0;
+                int flags = camera.crouching() ? NetworkPacket.CROUCHING : 0;
                 if (equipped == Inventory.Item.LIGHTER && lighter.lit() || equipped == Inventory.Item.TORCH && torch.lit()) {
                     flags |= NetworkPacket.LIT;
                 }
@@ -286,7 +287,7 @@ public final class AxeDemo {
                     camera.refreshCursor(window, menu);
                 } else if (network.mode() == NetworkManager.Mode.CLIENT && network.connected()
                         && menu.screen() == GameMenu.Screen.CONNECT) {
-                    camera.position().set(2.25f, Terrain.height(2.25f, 4.65f) + 1.53f, 4.65f);
+                    camera.spawnAt(2.25f, 4.65f);
                     menu.networkConnected();
                     camera.refreshCursor(window, menu);
                 } else if (network.mode() != NetworkManager.Mode.OFFLINE) {
@@ -361,7 +362,6 @@ public final class AxeDemo {
                     continue;
                 }
                 boolean playing = !menu.visible();
-                float traveled = playing ? camera.update(window, delta, forest) : 0.0f;
                 boolean sprinting = camera.sprinting();
                 camera.view(view);
                 Vector3f eye = camera.position();
@@ -534,6 +534,7 @@ public final class AxeDemo {
                         || inventory.equipped() == Inventory.Item.STONE)) {
                     glClear(GL_DEPTH_BUFFER_BIT);
                     float bob = settings.fraction(GameSettings.Option.ITEM_BOB);
+                    if (camera.crouching()) bob *= 0.58f;
                     if (bowEquipped) bob *= 1.0f - 0.77f * bow.aimAmount();
                     motion.heldPose(heldPose, bob, shake);
                     itemProjection.setPerspective(Sky.FOV, aspect, 0.05f, 60);

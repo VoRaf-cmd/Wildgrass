@@ -10,13 +10,13 @@ final class ClayMesh {
             {0, 1, 3, 7}, {0, 3, 2, 7}, {0, 2, 6, 7},
             {0, 6, 4, 7}, {0, 4, 5, 7}, {0, 5, 1, 7}
     };
-    private static final float STEP = 0.038f;
-    private static final int NX = 33, NY = 57, NZ = 19;
+    private static final float STEP = 0.066f;
+    private static final int NX = 19, NY = 33, NZ = 11;
     private static final float MIN_X = -(NX - 1) * STEP / 2, MIN_Y = -0.11f, MIN_Z = -(NZ - 1) * STEP / 2;
     private static final Form[] FORMS = {
-            new Form(0, 1.11f, 0.015f, .283f, .389f, .192f, 0, 0),
-            new Form(0, .82f, .02f, .25f, .171f, .172f, 0, 0),
-            new Form(0, 1.415f, .006f, .121f, .172f, .121f, 0, 0),
+            new Form(0, 1.11f, 0.015f, .270f, .389f, .182f, 0, ClayAvatar.SPINE),
+            new Form(0, .82f, .02f, .238f, .171f, .160f, 0, 0),
+            new Form(0, 1.415f, .006f, .121f, .172f, .121f, 0, ClayAvatar.SPINE),
             new Form(0, 1.653f, -.017f, .276f, .273f, .237f, 0, 1),
             new Form(-.307f, 1.21f, .005f, .102f, .201f, .107f, .34f, 2),
             new Form(-.396f, .975f, -.012f, .096f, .213f, .105f, .21f, 3),
@@ -24,10 +24,10 @@ final class ClayMesh {
             new Form(.396f, .975f, -.012f, .096f, .213f, .105f, -.21f, 5),
             new Form(-.143f, .638f, .013f, .115f, .253f, .128f, .06f, 6),
             new Form(-.153f, .285f, .016f, .097f, .244f, .105f, 0, 7),
-            new Form(-.153f, .107f, -.048f, .109f, .107f, .18f, 0, 7),
+            new Form(-.153f, .107f, -.048f, .109f, .107f, .18f, 0, 10),
             new Form(.143f, .638f, .013f, .115f, .253f, .128f, -.06f, 8),
             new Form(.153f, .285f, .016f, .097f, .244f, .105f, 0, 9),
-            new Form(.153f, .107f, -.048f, .109f, .107f, .18f, 0, 9)
+            new Form(.153f, .107f, -.048f, .109f, .107f, .18f, 0, 11)
     };
 
     private float[] vertices = new float[32768];
@@ -84,14 +84,16 @@ final class ClayMesh {
         Vector3f normal = new Vector3f(b).sub(a).cross(new Vector3f(c).sub(a));
         if (normal.lengthSquared() < 1e-15f) return;
         Vector3f na = normalAt(a);
-        vertex(a, na);
+        normal.normalize();
         if (normal.dot(na) < 0) {
-            vertex(c, normalAt(c));
-            vertex(b, normalAt(b));
-        } else {
-            vertex(b, normalAt(b));
-            vertex(c, normalAt(c));
+            normal.negate();
+            Vector3f temp = b;
+            b = c;
+            c = temp;
         }
+        vertex(a, na.lerp(normal, .45f).normalize());
+        vertex(b, normalAt(b).lerp(normal, .45f).normalize());
+        vertex(c, normalAt(c).lerp(normal, .45f).normalize());
     }
 
     private void vertex(Vector3f point, Vector3f normal) {
@@ -103,14 +105,14 @@ final class ClayMesh {
         vertices[size++] = normal.x;
         vertices[size++] = normal.y;
         vertices[size++] = normal.z;
-        float mottling = .94f + .035f * (float) Math.sin(x * 23 + y * 13) * (float) Math.sin(z * 25 - y * 15);
+        float mottling = .95f + .022f * (float) Math.sin(x * 23 + y * 13) * (float) Math.sin(z * 25 - y * 15);
         float feetShade = .79f + .21f * Math.clamp(y / .72f, 0, 1);
         vertices[size++] = mottling * feetShade;
         vertices[size++] = mottling * feetShade;
         vertices[size++] = mottling * feetShade;
         vertices[size++] = 0;
 
-        float[] distance = new float[10];
+        float[] distance = new float[ClayAvatar.BONE_COUNT];
         Arrays.fill(distance, Float.POSITIVE_INFINITY);
         float nearest = Float.POSITIVE_INFINITY;
         for (Form form : FORMS) {

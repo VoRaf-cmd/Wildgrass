@@ -5,7 +5,7 @@ import java.nio.ByteBuffer;
 /** Small, versioned UDP messages. All fields use network byte order. */
 final class NetworkPacket {
     static final int MAGIC = 0x57475253; // WGRS
-    static final byte VERSION = 2;
+    static final byte VERSION = 3;
     static final byte HELLO = 1;
     static final byte WELCOME = 2;
     static final byte POSITION = 3;
@@ -86,7 +86,7 @@ final class NetworkPacket {
         int item = bytes.get();
         int flags = Byte.toUnsignedInt(bytes.get());
         if (!coordinate(x) || !coordinate(y) || !coordinate(z) || !(Math.abs(yaw) <= 6.3f)
-                || !(Math.abs(pitch) <= 1.56f) || item < -1 || item >= ITEMS.length || flags > 7) return null;
+                || !(Math.abs(pitch) <= 1.56f) || item < -1 || item >= ITEMS.length || (flags & ~POSE_FLAGS) != 0) return null;
         return new Message(POSITION, nonce, 0, sequence, new Pose(x, y, z, yaw, pitch, item, flags), null);
     }
 
@@ -105,7 +105,8 @@ final class NetworkPacket {
 
     private static boolean coordinate(float value) { return Math.abs(value) <= 100.0f; }
 
-    static final int LIT = 1, AIMING = 2, DRAWING = 4;
+    static final int LIT = 1, AIMING = 2, DRAWING = 4, CROUCHING = 8;
+    private static final int POSE_FLAGS = LIT | AIMING | DRAWING | CROUCHING;
     static final Inventory.Item[] ITEMS = Inventory.Item.values();
     enum Kind { USE, BLAST, DYNAMITE, ARROW, STONE, CHOP, CUT, CAMPFIRE, IGNITE }
     private static final Kind[] KINDS = Kind.values();

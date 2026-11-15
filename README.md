@@ -13,7 +13,7 @@ $env:JAVA_HOME = 'C:\Users\Rafael\.jdks\ms-21.0.12.1'
 
 Se aparecer `could not open ...\lib\jvm.cfg`, o `JAVA_HOME` aponta para uma instalação incompleta. Use o caminho acima nesta instalação; a pasta temporária `javaengine-jdk21` não é um JDK completo.
 
-O wrapper baixa o Gradle e as dependências na primeira execução. Escolha **Jogar** na tela inicial. Use WASD para andar, segure Shift para correr, mova o mouse para olhar e clique com o botão esquerdo para usar o item equipado. **Esc** pausa e retoma a partida. Aproxime-se da árvore e mire o ponto central no tronco para ouvir o impacto e ver as lascas de madeira.
+O wrapper baixa o Gradle e as dependências na primeira execução. Escolha **Jogar** na tela inicial. Use WASD para andar, segure Shift para correr e segure Ctrl para agachar e andar mais devagar. Mova o mouse para olhar e clique com o botão esquerdo para usar o item equipado. **Esc** pausa e retoma a partida. Aproxime-se da árvore e mire o ponto central no tronco para ouvir o impacto e ver as lascas de madeira.
 
 **Configurações**, na tela inicial e no menu de pausa, permite ajustar o volume geral, a sensibilidade do mouse, o tremor da câmera, o balanço dos itens, a pixelização e o VSync. Use o mouse ou as setas do teclado. As alterações são salvas automaticamente em `%LOCALAPPDATA%\Wildgrass\settings.properties` no Windows.
 
