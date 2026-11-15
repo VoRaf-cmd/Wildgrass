@@ -24,19 +24,30 @@ final class ObjModel implements AutoCloseable {
     private final int vertexCount;
 
     ObjModel(float[] vertices) {
-        vertexCount = vertices.length / FLOATS_PER_VERTEX;
+        this(vertices, false);
+    }
+
+    ObjModel(float[] vertices, boolean skinned) {
+        int stride = (FLOATS_PER_VERTEX + (skinned ? 8 : 0)) * Float.BYTES;
+        vertexCount = vertices.length * Float.BYTES / stride;
         vao = glGenVertexArrays();
         buffer = glGenBuffers();
         glBindVertexArray(vao);
         glBindBuffer(GL_ARRAY_BUFFER, buffer);
         glBufferData(GL_ARRAY_BUFFER, vertices, GL_STATIC_DRAW);
         for (int attribute = 0; attribute < 3; attribute++) {
-            glVertexAttribPointer(attribute, 3, GL_FLOAT, false, FLOATS_PER_VERTEX * Float.BYTES,
+            glVertexAttribPointer(attribute, 3, GL_FLOAT, false, stride,
                     (long) attribute * 3 * Float.BYTES);
             glEnableVertexAttribArray(attribute);
         }
-        glVertexAttribPointer(3, 1, GL_FLOAT, false, FLOATS_PER_VERTEX * Float.BYTES, 9L * Float.BYTES);
+        glVertexAttribPointer(3, 1, GL_FLOAT, false, stride, 9L * Float.BYTES);
         glEnableVertexAttribArray(3);
+        if (skinned) {
+            glVertexAttribPointer(4, 4, GL_FLOAT, false, stride, 10L * Float.BYTES);
+            glVertexAttribPointer(5, 4, GL_FLOAT, false, stride, 14L * Float.BYTES);
+            glEnableVertexAttribArray(4);
+            glEnableVertexAttribArray(5);
+        }
         glBindVertexArray(0);
     }
 

@@ -158,7 +158,10 @@ public final class AxeDemo {
             var remoteIgnition = new IgnitionAim();
             var eventPoint = new Vector3f();
             var eventDirection = new Vector3f();
-            java.util.function.Consumer<Vector3f> publishBlast = point -> network.action(BLAST, point, null, 0);
+            java.util.function.Consumer<Vector3f> publishBlast = point -> {
+                remotePlayer.reactToBlast(point);
+                network.action(BLAST, point, null, 0);
+            };
             long seenRemoteRevision = 0;
             var impact = new Vector3f();
             var previewEye = new Vector3f(-3.8f, 2.05f, 8.45f);
@@ -311,7 +314,10 @@ public final class AxeDemo {
                                 if (item == Inventory.Item.MACHETE.ordinal()) slashSound.play();
                             }
                         }
-                        case BLAST -> blast.explode(eventPoint, camera.position(), forest, meadow, motion, dynamiteBoom);
+                        case BLAST -> {
+                            remotePlayer.reactToBlast(eventPoint);
+                            blast.explode(eventPoint, camera.position(), forest, meadow, motion, dynamiteBoom);
+                        }
                         case DYNAMITE -> {
                             remotePlayer.use(Inventory.Item.DYNAMITE);
                             dynamite.remoteThrow(eventPoint, eventDirection);
