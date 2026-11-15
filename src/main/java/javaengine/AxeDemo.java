@@ -83,6 +83,7 @@ public final class AxeDemo {
              var dynamiteMesh = loadModel("dynamite.obj", null);
              var blastRing = loadModel("blast-ring.obj", null);
              var campfireMesh = loadModel("campfire.obj", null);
+             var remotePlayerMesh = loadModel("remote-player.obj", null);
              var stump = loadModel("stump.obj", null);
              var scar = loadModel("tree-cut.obj", null);
              var log = loadModel("log.obj", null);
@@ -117,6 +118,7 @@ public final class AxeDemo {
              var dynamiteFuse = new SoundEffect("dynamite-fuse.wav");
              var dynamiteBoom = new SoundEffect("dynamite-blast.wav");
              var campfirePlace = new SoundEffect("campfire-place.wav");
+             var network = new NetworkManager();
              var stack = MemoryStack.stackPush()) {
             var camera = new FirstPersonCamera();
             var swing = new AxeSwing();
@@ -139,6 +141,8 @@ public final class AxeDemo {
             var forest = new Forest();
             var inventory = new Inventory();
             var menu = new GameMenu(settings, inventory);
+            var remotePlayer = new RemotePlayer();
+            long seenRemoteRevision = 0;
             var impact = new Vector3f();
             var previewEye = new Vector3f(-3.8f, 2.05f, 8.45f);
             var previewAim = new Vector3f(-0.16f, -0.09f, -1.0f).normalize();
@@ -215,6 +219,58 @@ public final class AxeDemo {
                 double now = glfwGetTime();
                 float delta = (float) Math.min(now - previous, 0.05);
                 previous = now;
+                switch (menu.consumeNetworkAction()) {
+                    case HOST -> {
+                        try {
+                            if (network.mode() != NetworkManager.Mode.HOST) network.startHost(NetworkManager.DEFAULT_PORT);
+                            menu.networkMessage(network.message());
+                            menu.networkHostStarted();
+                            camera.refreshCursor(window, menu);
+                        } catch (IOException | IllegalArgumentException error) {
+                            menu.networkMessage("Não foi possível abrir UDP 7777: " + error.getMessage());
+                        }
+                    }
+                    case CONNECT -> {
+                        try {
+                            network.connectToHost(menu.ipAddress(), NetworkManager.DEFAULT_PORT);
+                            menu.networkMessage(network.message());
+                        } catch (IOException | IllegalArgumentException error) {
+                            menu.networkMessage(error.getMessage());
+                        }
+                    }
+                    case CANCEL -> {
+                        if (network.mode() == NetworkManager.Mode.CLIENT && !network.connected()) network.close();
+                    }
+                    case DISCONNECT -> {
+                        network.close();
+                        menu.networkDisconnected("Você saiu da sessão.");
+                        camera.refreshCursor(window, menu);
+                    }
+                    case NONE -> { }
+                }
+                NetworkManager.Mode previousMode = network.mode();
+                network.update(delta, camera.position());
+                if (previousMode == NetworkManager.Mode.CLIENT && network.mode() == NetworkManager.Mode.OFFLINE) {
+                    menu.networkDisconnected(network.message());
+                    camera.refreshCursor(window, menu);
+                } else if (network.mode() == NetworkManager.Mode.CLIENT && network.connected()
+                        && menu.screen() == GameMenu.Screen.CONNECT) {
+                    camera.position().set(2.25f, Terrain.height(2.25f, 4.65f) + 1.53f, 4.65f);
+                    menu.networkConnected();
+                    camera.refreshCursor(window, menu);
+                } else if (network.mode() != NetworkManager.Mode.OFFLINE) {
+                    menu.networkMessage(network.message());
+                }
+                if (network.hasRemote()) {
+                    if (network.remoteRevision() != seenRemoteRevision) {
+                        remotePlayer.receive(network.remotePosition());
+                        seenRemoteRevision = network.remoteRevision();
+                    }
+                } else {
+                    remotePlayer.hide();
+                    seenRemoteRevision = 0;
+                }
+                remotePlayer.update(delta);
                 glfwGetFramebufferSize(window, windowWidth, windowHeight);
                 int width = windowWidth.get(0);
                 int height = windowHeight.get(0);
@@ -361,6 +417,7 @@ public final class AxeDemo {
                 shader.draw(terrain, model.identity(), true, buffer);
                 meadow.draw(shader, eye, aim, buffer);
                 forest.draw(shader, tree, leaves, stump, scar, log, fire, eye, aim, buffer);
+                remotePlayer.draw(shader, remotePlayerMesh, buffer);
                 birds.draw(shader, birdBody, birdWing, buffer);
                 chips.draw(shader, chip, dust, grassFragment, buffer);
                 meadow.drawFire(shader, fire, eye, aim, buffer);

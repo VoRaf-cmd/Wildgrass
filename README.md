@@ -37,6 +37,12 @@ A mochila começa com **3 dinamites**. Pressione **E** para colocar a pilha em u
 
 Na mochila, fabrique **1 fogueira** com **3 gravetos, 2 pedras e 1 fibra seca**. Coloque-a na barra rápida e olhe para o chão: a prévia indica onde ela cabe. Clique para posicioná-la. Depois, equipe o isqueiro, abra a tampa e mantenha a mira sobre a fogueira de perto para acendê-la. Ela ilumina o entorno e produz chama e fumaça. A fogueira permanece acesa durante esta partida; o preparo de alimentos será uma interação futura.
 
+## Multiplayer LAN (primeira etapa)
+
+Os dois computadores precisam estar na mesma rede local ou conectados à mesma sala no Radmin VPN. O anfitrião inicia o jogo, escolhe **Jogar solo**, abre o menu com **Esc** e seleciona **Abrir para LAN**. O jogo passa a escutar pacotes UDP na porta **7777**. O amigo seleciona **Conectar por IP** na tela inicial e digita o IPv4 do anfitrião mostrado no Radmin. Se o Windows pedir autorização de firewall, permita o aplicativo na rede do Radmin.
+
+Esta etapa aceita **dois jogadores**. O anfitrião continua jogando no próprio computador, e ambos veem o personagem do outro se mover. A troca de posição usa UDP não bloqueante e continua ativa mesmo com o menu aberto. Por enquanto, inventário, árvores, relva, fogo e outros objetos ainda são locais em cada computador; essas interações serão sincronizadas em uma etapa posterior. Se o anfitrião sair, o convidado retorna ao menu inicial.
+
 ## Modelo e renderização
 
 O arquivo [axe.obj](src/main/resources/models/axe.obj) contém a malha. Mantenha [axe.mtl](src/main/resources/models/axe.mtl) na mesma pasta ao importar o machado no Blender.

@@ -38,6 +38,11 @@ final class FirstPersonCamera {
             hasMousePosition = captured;
         });
         glfwSetKeyCallback(window, (handle, key, scancode, action, mods) -> {
+            if (menu.screen() == GameMenu.Screen.CONNECT && key == GLFW_KEY_V && action == GLFW_PRESS
+                    && (mods & GLFW_MOD_CONTROL) != 0) {
+                menu.pasteIp(glfwGetClipboardString(handle));
+                return;
+            }
             if (menu.visible() || key == GLFW_KEY_ESCAPE || key == GLFW_KEY_E) {
                 menu.key(key, action);
                 syncCursor(handle, menu);
@@ -45,6 +50,7 @@ final class FirstPersonCamera {
                 inventory.select(key - GLFW_KEY_1);
             }
         });
+        glfwSetCharCallback(window, (handle, codepoint) -> menu.charInput(codepoint));
         glfwSetScrollCallback(window, (handle, x, y) -> {
             if (captured && y != 0.0) {
                 inventory.select(inventory.selected() + (y < 0.0 ? 1 : -1));
@@ -92,6 +98,10 @@ final class FirstPersonCamera {
         if (captured != enabled) {
             capture(window, enabled);
         }
+    }
+
+    void refreshCursor(long window, GameMenu menu) {
+        syncCursor(window, menu);
     }
 
     private void capture(long window, boolean enabled) {
