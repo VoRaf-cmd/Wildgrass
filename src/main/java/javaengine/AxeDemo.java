@@ -17,6 +17,7 @@ import java.nio.file.Path;
 import static org.lwjgl.glfw.Callbacks.glfwFreeCallbacks;
 import static org.lwjgl.glfw.GLFW.*;
 import static org.lwjgl.opengl.GL33C.*;
+import static javaengine.NetworkPacket.Kind.*;
 
 public final class AxeDemo {
     public static void main(String[] args) throws IOException {
@@ -83,7 +84,7 @@ public final class AxeDemo {
              var dynamiteMesh = loadModel("dynamite.obj", null);
              var blastRing = loadModel("blast-ring.obj", null);
              var campfireMesh = loadModel("campfire.obj", null);
-             var remotePlayerMesh = loadModel("remote-player.obj", null);
+             var remotePlayer = new RemotePlayer();
              var stump = loadModel("stump.obj", null);
              var scar = loadModel("tree-cut.obj", null);
              var log = loadModel("log.obj", null);
@@ -141,19 +142,36 @@ public final class AxeDemo {
             var forest = new Forest();
             var inventory = new Inventory();
             var menu = new GameMenu(settings, inventory);
-            var remotePlayer = new RemotePlayer();
+            var remoteItems = new ObjModel[NetworkPacket.ITEMS.length];
+            remoteItems[Inventory.Item.AXE.ordinal()] = axe;
+            remoteItems[Inventory.Item.MACHETE.ordinal()] = macheteMesh;
+            remoteItems[Inventory.Item.BOW.ordinal()] = bowMesh;
+            remoteItems[Inventory.Item.TORCH.ordinal()] = torchMesh;
+            remoteItems[Inventory.Item.LIGHTER.ordinal()] = lighterBody;
+            remoteItems[Inventory.Item.STONE.ordinal()] = stoneMesh;
+            remoteItems[Inventory.Item.DYNAMITE.ordinal()] = dynamiteMesh;
+            remoteItems[Inventory.Item.CAMPFIRE.ordinal()] = campfireMesh;
+            remoteItems[Inventory.Item.ARROW.ordinal()] = arrowMesh;
+            remoteItems[Inventory.Item.LOG.ordinal()] = log;
+            remoteItems[Inventory.Item.STICK.ordinal()] = chip;
+            remoteItems[Inventory.Item.FIBER.ordinal()] = grassFragment;
+            var remoteIgnition = new IgnitionAim();
+            var eventPoint = new Vector3f();
+            var eventDirection = new Vector3f();
+            java.util.function.Consumer<Vector3f> publishBlast = point -> network.action(BLAST, point, null, 0);
             long seenRemoteRevision = 0;
             var impact = new Vector3f();
             var previewEye = new Vector3f(-3.8f, 2.05f, 8.45f);
             var previewAim = new Vector3f(-0.16f, -0.09f, -1.0f).normalize();
             camera.attach(window, inventory, menu, () -> {
                 if (inventory.hasAxeEquipped()) {
-                    swing.start();
+                    if (swing.start()) network.action(USE, camera.position(), null, Inventory.Item.AXE.ordinal());
                 } else if (inventory.hasLighterEquipped()) {
                     lighter.toggle();
                     lighterSound.play();
                 } else if (inventory.hasMacheteEquipped() && machete.start()) {
                     slashSound.play();
+                    network.action(USE, camera.position(), null, Inventory.Item.MACHETE.ordinal());
                 } else if (inventory.equipped() == Inventory.Item.BOW) {
                     if (bow.press(inventory)) bowDraw.play();
                 } else if (inventory.equipped() == Inventory.Item.TORCH) {
@@ -249,7 +267,17 @@ public final class AxeDemo {
                     case NONE -> { }
                 }
                 NetworkManager.Mode previousMode = network.mode();
-                network.update(delta, camera.position());
+                var equipped = inventory.equipped();
+                int flags = 0;
+                if (equipped == Inventory.Item.LIGHTER && lighter.lit() || equipped == Inventory.Item.TORCH && torch.lit()) {
+                    flags |= NetworkPacket.LIT;
+                }
+                if (!menu.visible() && (equipped == Inventory.Item.BOW && (bow.drawing() || bow.aimAmount() > 0.15f)
+                        || equipped == Inventory.Item.DYNAMITE && glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS)) {
+                    flags |= NetworkPacket.AIMING;
+                }
+                if (equipped == Inventory.Item.BOW && bow.drawing() && !menu.visible()) flags |= NetworkPacket.DRAWING;
+                network.update(delta, camera.position(), camera.yaw(), camera.pitch(), equipped, flags);
                 if (previousMode == NetworkManager.Mode.CLIENT && network.mode() == NetworkManager.Mode.OFFLINE) {
                     menu.networkDisconnected(network.message());
                     camera.refreshCursor(window, menu);
@@ -263,7 +291,7 @@ public final class AxeDemo {
                 }
                 if (network.hasRemote()) {
                     if (network.remoteRevision() != seenRemoteRevision) {
-                        remotePlayer.receive(network.remotePosition());
+                        remotePlayer.receive(network.remotePose());
                         seenRemoteRevision = network.remoteRevision();
                     }
                 } else {
@@ -271,6 +299,54 @@ public final class AxeDemo {
                     seenRemoteRevision = 0;
                 }
                 remotePlayer.update(delta);
+                for (NetworkPacket.Action event; (event = network.pollAction()) != null; ) {
+                    eventPoint.set(event.x(), event.y(), event.z());
+                    eventDirection.set(event.dx(), event.dy(), event.dz());
+                    switch (event.kind()) {
+                        case USE -> {
+                            int item = (int) event.value();
+                            if (item >= 0 && item < NetworkPacket.ITEMS.length) {
+                                remotePlayer.use(NetworkPacket.ITEMS[item]);
+                                if (item == Inventory.Item.AXE.ordinal()) swingSound.play();
+                                if (item == Inventory.Item.MACHETE.ordinal()) slashSound.play();
+                            }
+                        }
+                        case BLAST -> blast.explode(eventPoint, camera.position(), forest, meadow, motion, dynamiteBoom);
+                        case DYNAMITE -> {
+                            remotePlayer.use(Inventory.Item.DYNAMITE);
+                            dynamite.remoteThrow(eventPoint, eventDirection);
+                            dynamiteToss.play();
+                            dynamiteFuse.play();
+                        }
+                        case ARROW, STONE -> {
+                            var item = event.kind() == ARROW ? Inventory.Item.ARROW : Inventory.Item.STONE;
+                            projectiles.launch(item, eventPoint, eventDirection, Math.clamp(event.value(), 8, 30), true);
+                            remotePlayer.use(event.kind() == ARROW ? Inventory.Item.BOW : item);
+                            if (event.kind() == ARROW) bowShot.play(); else slashSound.play();
+                        }
+                        case CHOP -> {
+                            TreeTarget hit = forest.chop(eventPoint, eventDirection, impact);
+                            if (hit != null) {
+                                chips.burst(impact, hit.center());
+                                hitSound.play();
+                                if (hit.isFalling()) splitSound.play();
+                            }
+                        }
+                        case CUT -> {
+                            if (meadow.cut(eventPoint, eventDirection, chips)) cutSound.play();
+                        }
+                        case CAMPFIRE -> {
+                            if (campfires.placeAt(eventPoint, meadow)) campfirePlace.play();
+                        }
+                        case IGNITE -> {
+                            remoteIgnition.begin();
+                            forest.aimFire(remoteIgnition, eventPoint, eventDirection);
+                            meadow.aimFire(remoteIgnition, eventPoint, eventDirection);
+                            campfires.aimFire(remoteIgnition, eventPoint, eventDirection);
+                            if (remoteIgnition.heat(0.5f)) ignitionSound.play();
+                        }
+                    }
+                }
                 glfwGetFramebufferSize(window, windowWidth, windowHeight);
                 int width = windowWidth.get(0);
                 int height = windowHeight.get(0);
@@ -313,34 +389,34 @@ public final class AxeDemo {
                 camera.sensitivityScale((float) (Math.tan(zoomFov * 0.5f) / Math.tan(Sky.FOV * 0.5f)));
                 if (!torchEquipped) torch.stow();
                 if (playing) {
-                    bow.update(delta, inventory, eye, aim, projectiles, bowReady, bowShot);
-                    dynamite.updateThrow(delta, inventory, eye, aim, dynamiteToss, dynamiteFuse);
-                    dynamite.update(delta, projectiles, forest, eye, meadow, blast, motion, dynamiteBoom);
-                    blast.update(delta);
-                    campfires.update(delta);
+                    float shotSpeed = bow.update(delta, inventory, eye, aim, projectiles, bowReady, bowShot);
+                    if (shotSpeed > 0) network.action(ARROW, eye, aim, shotSpeed);
+                    if (dynamite.updateThrow(delta, inventory, eye, aim, dynamiteToss, dynamiteFuse)) {
+                        network.action(DYNAMITE, eye, aim, 0);
+                    }
                     if (campfireRequest[0] && campfires.place(eye, aim, forest, meadow, inventory)) {
                         campfirePlace.play();
+                        network.action(CAMPFIRE, campfires.lastPlacement(), null, 0);
                     }
                     campfireRequest[0] = false;
                     torch.update(delta);
                     if (stoneRequest[0] && inventory.takeSelected(Inventory.Item.STONE)) {
                         projectiles.launch(Inventory.Item.STONE, eye, aim, 12.0f);
+                        network.action(STONE, eye, aim, 12.0f);
                         slashSound.play();
                     }
                     stoneRequest[0] = false;
-                    meadow.update(delta, wind.strength());
                     if (!axeEquipped) {
                         swing.cancel();
                     }
                     if (swing.update(delta)) {
                         swingSound.play();
                     }
-                    chips.update(delta);
-                    motion.update(delta);
                     motion.stride(traveled, sprinting, delta);
                     if (swing.reachedImpact()) {
                         TreeTarget hit = forest.chop(eye, aim, impact);
                         if (hit != null) {
+                            network.action(CHOP, eye, aim, 0);
                             hitSound.play();
                             chips.burst(impact, hit.center());
                             motion.hit();
@@ -353,10 +429,10 @@ public final class AxeDemo {
                         machete.cancel();
                     }
                     if (machete.update(delta) && meadow.cut(eye, aim, chips)) {
+                        network.action(CUT, eye, aim, 0);
                         cutSound.play();
                         motion.cut();
                     }
-                    forest.update(delta, meadow, chips, motion, landSound);
                     if (lighterEquipped) {
                         lighter.update(delta);
                     } else {
@@ -364,20 +440,30 @@ public final class AxeDemo {
                     }
                     if (lighter.lit() || torch.lit()) {
                         if (camera.ignite(ignition, forest, meadow, campfires, delta)) {
+                            network.action(IGNITE, eye, aim, 0);
                             ignitionSound.play();
                         }
                     } else {
                         ignition.reset();
-                    }
-                    if (forest.collect(delta, eye, inventory)
-                            | projectiles.update(delta, forest, eye, inventory, projectileHit)) {
-                        pickupSound.play();
                     }
                     stepTimer = Math.max(0.0f, stepTimer - delta);
                     if (traveled > 0.0f && stepTimer == 0.0f && meadow.tallAt(eye.x, eye.z)) {
                         rustleSound.play();
                         stepTimer = sprinting ? 0.25f : 0.37f;
                     }
+                }
+                if (playing || network.connected()) {
+                    dynamite.update(delta, projectiles, forest, camera.position(), meadow, blast, motion,
+                            dynamiteBoom, publishBlast);
+                    blast.update(delta);
+                    campfires.update(delta);
+                    meadow.update(delta, wind.strength());
+                    chips.update(delta);
+                    motion.update(delta);
+                    forest.update(delta, meadow, chips, motion, landSound);
+                    boolean picked = projectiles.update(delta, forest, camera.position(),
+                            playing ? inventory : null, projectileHit);
+                    if ((playing && forest.collect(delta, eye, inventory)) || picked) pickupSound.play();
                 }
                 if (!playing) {
                     stoneRequest[0] = false;
@@ -417,7 +503,8 @@ public final class AxeDemo {
                 shader.draw(terrain, model.identity(), true, buffer);
                 meadow.draw(shader, eye, aim, buffer);
                 forest.draw(shader, tree, leaves, stump, scar, log, fire, eye, aim, buffer);
-                remotePlayer.draw(shader, remotePlayerMesh, buffer);
+                remotePlayer.draw(shader, remoteItems, stringMesh, lighterLid, fire,
+                        network.mode() == NetworkManager.Mode.HOST, buffer);
                 birds.draw(shader, birdBody, birdWing, buffer);
                 chips.draw(shader, chip, dust, grassFragment, buffer);
                 meadow.drawFire(shader, fire, eye, aim, buffer);

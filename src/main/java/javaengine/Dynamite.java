@@ -4,6 +4,7 @@ import org.joml.Matrix4f;
 import org.joml.Vector3f;
 
 import java.nio.FloatBuffer;
+import java.util.function.Consumer;
 
 final class Dynamite {
     private static final float SPEED = 10.5f;
@@ -34,31 +35,46 @@ final class Dynamite {
         return direction.set(aim).add(0.0f, 0.17f, 0.0f).normalize();
     }
 
-    void updateThrow(float delta, Inventory inventory, Vector3f eye, Vector3f aim,
+    boolean updateThrow(float delta, Inventory inventory, Vector3f eye, Vector3f aim,
                      SoundEffect toss, SoundEffect fuse) {
         recovery = Math.max(0.0f, recovery - delta);
-        if (preparation < 0.0f) return;
+        if (preparation < 0.0f) return false;
         preparation += delta;
-        if (preparation < WINDUP) return;
+        if (preparation < WINDUP) return false;
         preparation = -1.0f;
         for (Charge charge : charges) {
             if (!charge.active && inventory.takeSelected(Inventory.Item.DYNAMITE)) {
-                Vector3f heading = throwDirection(aim);
-                Projectiles.origin(eye, heading, charge.point);
-                charge.velocity.set(heading).mul(SPEED);
-                charge.active = true;
-                charge.landed = false;
-                charge.age = 0.0f;
+                launch(charge, eye, aim, false);
                 recovery = RECOVERY;
                 toss.play();
                 fuse.play();
+                return true;
+            }
+        }
+        return false;
+    }
+
+    void remoteThrow(Vector3f eye, Vector3f aim) {
+        for (Charge charge : charges) {
+            if (!charge.active) {
+                launch(charge, eye, aim, true);
                 return;
             }
         }
     }
 
+    private void launch(Charge charge, Vector3f eye, Vector3f aim, boolean remote) {
+        Vector3f heading = throwDirection(aim);
+        Projectiles.origin(eye, heading, charge.point);
+        charge.velocity.set(heading).mul(SPEED);
+        charge.active = true;
+        charge.landed = false;
+        charge.age = 0.0f;
+        charge.remote = remote;
+    }
+
     void update(float delta, Projectiles ballistics, Forest forest, Vector3f player, Meadow meadow,
-                BlastEffects effects, ImpactMotion motion, SoundEffect boom) {
+                BlastEffects effects, ImpactMotion motion, SoundEffect boom, Consumer<Vector3f> detonation) {
         for (Charge charge : charges) {
             if (!charge.active) continue;
             float step = Math.min(delta, FUSE - charge.age);
@@ -68,7 +84,10 @@ final class Dynamite {
             charge.age += step;
             if (charge.age >= FUSE) {
                 charge.active = false;
-                effects.explode(charge.point, player, forest, meadow, motion, boom);
+                if (!charge.remote) {
+                    effects.explode(charge.point, player, forest, meadow, motion, boom);
+                    detonation.accept(charge.point);
+                }
             }
         }
     }
@@ -115,6 +134,6 @@ final class Dynamite {
         final Vector3f point = new Vector3f();
         final Vector3f velocity = new Vector3f();
         float age;
-        boolean active, landed;
+        boolean active, landed, remote;
     }
 }

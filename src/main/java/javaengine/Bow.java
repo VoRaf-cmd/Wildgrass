@@ -40,12 +40,14 @@ final class Bow {
         charge = 0.0f;
     }
 
-    void update(float delta, Inventory inventory, Vector3f eye, Vector3f aim, Projectiles shots,
+    float update(float delta, Inventory inventory, Vector3f eye, Vector3f aim, Projectiles shots,
                 SoundEffect ready, SoundEffect fire) {
+        float launchedSpeed = 0.0f;
         recovery = Math.max(0.0f, recovery - delta);
         if (released) {
             if (inventory.take(Inventory.Item.ARROW)) {
-                shots.launch(Inventory.Item.ARROW, eye, aim, speed());
+                launchedSpeed = speed();
+                shots.launch(Inventory.Item.ARROW, eye, aim, launchedSpeed);
                 shotPower = 0.36f + 0.64f * charge;
                 recovery = RECOVERY_TIME;
                 fire.volume(-6.0f * (1.0f - charge));
@@ -56,6 +58,7 @@ final class Bow {
             charge = Math.min(1.0f, charge + delta / DRAW_TIME);
             if (charge == 1.0f) ready.play();
         }
+        return launchedSpeed;
     }
 
     boolean drawing() { return drawing; }

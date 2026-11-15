@@ -37,8 +37,18 @@ final class Campfires {
 
     boolean place(Vector3f eye, Vector3f aim, Forest forest, Meadow meadow, Inventory inventory) {
         if (!target(eye, aim, forest) || !inventory.takeSelected(Inventory.Item.CAMPFIRE)) return false;
-        fires[count++] = new Campfire(new Vector3f(target));
-        meadow.blast(target, 0.62f);
+        return placeAt(target, meadow);
+    }
+
+    Vector3f lastPlacement() { return fires[count - 1].position; }
+
+    boolean placeAt(Vector3f location, Meadow meadow) {
+        if (count == fires.length) return false;
+        for (int i = 0; i < count; i++) {
+            if (fires[i].position.distanceSquared(location) < 0.01f) return false;
+        }
+        fires[count++] = new Campfire(new Vector3f(location));
+        meadow.blast(location, 0.62f);
         return true;
     }
 

@@ -176,6 +176,9 @@ final class FirstPersonCamera {
         return direction;
     }
 
+    float yaw() { return yaw; }
+    float pitch() { return pitch; }
+
     boolean ignite(IgnitionAim ignition, Forest forest, Meadow meadow, float seconds) {
         return ignite(ignition, forest, meadow, null, seconds);
     }

@@ -9,6 +9,7 @@ import java.net.StandardProtocolFamily;
 import java.nio.ByteBuffer;
 import java.nio.channels.DatagramChannel;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.ArrayDeque;
 
 /** One host and one client. Called from the game loop; receive never waits for a packet. */
 final class NetworkManager implements AutoCloseable {
@@ -19,6 +20,12 @@ final class NetworkManager implements AutoCloseable {
     private static final float CONNECT_TIMEOUT = 10.0f;
     private final ByteBuffer receiveBuffer = ByteBuffer.allocate(NetworkPacket.MAX_BYTES);
     private final Vector3f remotePosition = new Vector3f();
+    private final ArrayDeque<NetworkPacket.Action> outgoing = new ArrayDeque<>();
+    private final ArrayDeque<NetworkPacket.Action> incoming = new ArrayDeque<>();
+    private NetworkPacket.Pose remotePose;
+    private int nextAction;
+    private int expectedAction;
+    private float retryAction;
     private DatagramChannel channel;
     private InetSocketAddress peer;
     private Mode mode = Mode.OFFLINE;
@@ -92,6 +99,10 @@ final class NetworkManager implements AutoCloseable {
     }
 
     void update(float delta, Vector3f localPosition) {
+        update(delta, localPosition, 0, 0, null, 0);
+    }
+
+    void update(float delta, Vector3f localPosition, float yaw, float pitch, Inventory.Item item, int flags) {
         if (channel == null) return;
         delta = Math.clamp(delta, 0.0f, 0.1f);
         try {
@@ -130,8 +141,13 @@ final class NetworkManager implements AutoCloseable {
                 sendTimer -= delta;
                 if (sendTimer <= 0.0f) {
                     send(NetworkPacket.position(localNonce, sendSequence++, localPosition.x, localPosition.y,
-                            localPosition.z), peer);
-                    sendTimer = SEND_INTERVAL;
+                            localPosition.z, yaw, pitch, item == null ? -1 : item.ordinal(), flags), peer);
+                    sendTimer = Math.max(0, sendTimer + SEND_INTERVAL);
+                }
+                retryAction -= delta;
+                if (!outgoing.isEmpty() && retryAction <= 0) {
+                    send(NetworkPacket.action(localNonce, nextAction, outgoing.getFirst()), peer);
+                    retryAction = 0.12f;
                 }
             }
         } catch (IOException error) {
@@ -157,7 +173,7 @@ final class NetworkManager implements AutoCloseable {
             return;
         }
         if (peer == null || !samePeer(from, peer)) return;
-        if (mode == Mode.CLIENT && packet.type() == NetworkPacket.WELCOME && packet.nonce() == localNonce) {
+        if (mode == Mode.CLIENT && !connected && packet.type() == NetworkPacket.WELCOME && packet.nonce() == localNonce) {
             peerNonce = packet.otherNonce();
             connected = true;
             silence = 0.0f;
@@ -178,11 +194,22 @@ final class NetworkManager implements AutoCloseable {
                 close();
                 message = "O host encerrou a sessão.";
             }
+        } else if (packet.type() == NetworkPacket.ACTION) {
+            if (packet.sequence() == expectedAction && incoming.size() < 128) {
+                incoming.addLast(packet.action());
+                expectedAction++;
+            }
+            if (packet.sequence() == expectedAction - 1) send(NetworkPacket.ack(localNonce, packet.sequence()), peer);
+        } else if (packet.type() == NetworkPacket.ACK && !outgoing.isEmpty() && packet.sequence() == nextAction) {
+            outgoing.removeFirst();
+            nextAction++;
+            retryAction = 0;
         } else if (packet.type() == NetworkPacket.POSITION
                 && (!hasSequence || Integer.compareUnsigned(packet.sequence(), receiveSequence) > 0)) {
             receiveSequence = packet.sequence();
             hasSequence = true;
-            remotePosition.set(packet.x(), packet.y(), packet.z());
+            remotePose = packet.pose();
+            remotePosition.set(remotePose.x(), remotePose.y(), remotePose.z());
             remoteRevision++;
             silence = 0.0f;
         }
@@ -201,14 +228,31 @@ final class NetworkManager implements AutoCloseable {
         peerNonce = 0L;
         receiveSequence = 0;
         hasSequence = false;
-        remoteRevision = 0;
+        clearActions();
         connected = false;
         message = "LAN aberta na porta " + hostPort + " · aguardando amigo";
     }
 
     Mode mode() { return mode; }
     boolean connected() { return connected; }
-    boolean hasRemote() { return connected && remoteRevision > 0; }
+    boolean hasRemote() { return connected && remotePose != null; }
+    NetworkPacket.Pose remotePose() { return remotePose; }
+    NetworkPacket.Action pollAction() { return incoming.pollFirst(); }
+
+    void action(NetworkPacket.Kind kind, Vector3f point, Vector3f direction, float value) {
+        if (connected) outgoing.addLast(new NetworkPacket.Action(kind, point.x, point.y, point.z,
+                direction == null ? 0 : direction.x, direction == null ? 0 : direction.y,
+                direction == null ? 0 : direction.z, value));
+    }
+
+    private void clearActions() {
+        outgoing.clear();
+        incoming.clear();
+        remotePose = null;
+        nextAction = 0;
+        expectedAction = 0;
+        retryAction = 0;
+    }
     Vector3f remotePosition() { return remotePosition; }
     long remoteRevision() { return remoteRevision; }
     String message() { return message; }
@@ -226,7 +270,7 @@ final class NetworkManager implements AutoCloseable {
         peer = null;
         connected = false;
         mode = Mode.OFFLINE;
-        remoteRevision = 0;
+        clearActions();
         receiveSequence = 0;
         hasSequence = false;
         sendSequence = 0;
