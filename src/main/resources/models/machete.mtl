@@ -1,0 +1,30 @@
+newmtl Grip
+Kd 0.25 0.3 0.19
+
+newmtl GripMid
+Kd 0.37 0.43 0.26
+
+newmtl GripDark
+Kd 0.16 0.22 0.14
+
+newmtl Guard
+Kd 0.48 0.44 0.31
+
+newmtl Pin
+Kd 0.67 0.63 0.47
+
+newmtl SteelDark
+Kd 0.33 0.4 0.41
+
+newmtl Blade
+Kd 0.57 0.66 0.68
+
+newmtl Edge
+Kd 0.88 0.92 0.89
+
+newmtl Grass
+Kd 0.44 0.62 0.24
+
+newmtl GrassTip
+Kd 0.69 0.73 0.31
+

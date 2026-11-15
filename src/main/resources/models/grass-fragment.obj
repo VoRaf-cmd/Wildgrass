@@ -1,0 +1,15 @@
+mtllib machete.mtl
+o GrassFragment
+v -0.11 -0.96 0.0
+v 0.11 -0.94 0.0
+v -0.055 0.18 0.18
+v 0.10 0.18 0.18
+v -0.20 0.97 0.35
+usemtl Grass
+f 1 2 4
+f 1 4 3
+usemtl GrassTip
+f 3 4 5
+f 1 4 2
+f 1 3 4
+f 3 5 4

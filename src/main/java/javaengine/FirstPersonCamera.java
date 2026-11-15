@@ -1,0 +1,185 @@
+package javaengine;
+
+import org.joml.Matrix4f;
+import org.joml.Vector3f;
+import org.lwjgl.system.MemoryStack;
+
+import static org.lwjgl.glfw.GLFW.*;
+
+final class FirstPersonCamera {
+    private static final float WALK_SPEED = 2.6f;
+    private static final float SPRINT_SPEED = 4.7f;
+    private final Vector3f position = new Vector3f(0.18f, 1.53f, 4.65f);
+    private final Vector3f direction = new Vector3f();
+    private float yaw;
+    private float pitch = -0.085f;
+    private boolean captured;
+    private boolean sprinting;
+    private boolean hasMousePosition;
+    private double lastX;
+    private double lastY;
+    private float sensitivityScale = 1.0f;
+
+    void attach(long window, Inventory inventory, GameMenu menu, Runnable useItem) {
+        attach(window, inventory, menu, useItem, () -> { });
+    }
+
+    void attach(long window, Inventory inventory, GameMenu menu, Runnable useItem, Runnable releaseItem) {
+        glfwSetCursorPosCallback(window, (handle, x, y) -> {
+            if (menu.visible()) {
+                menuPointer(handle, menu, x, y, false);
+            } else if (captured && hasMousePosition) {
+                double sensitivity = 0.0028 * menu.settings().fraction(GameSettings.Option.SENSITIVITY) * sensitivityScale;
+                yaw = (float) ((yaw + (x - lastX) * sensitivity) % (2 * Math.PI));
+                pitch = (float) Math.clamp(pitch - (y - lastY) * sensitivity, -1.55, 1.55);
+            }
+            lastX = x;
+            lastY = y;
+            hasMousePosition = captured;
+        });
+        glfwSetKeyCallback(window, (handle, key, scancode, action, mods) -> {
+            if (menu.visible() || key == GLFW_KEY_ESCAPE || key == GLFW_KEY_E) {
+                menu.key(key, action);
+                syncCursor(handle, menu);
+            } else if (action == GLFW_PRESS && key >= GLFW_KEY_1 && key <= GLFW_KEY_7) {
+                inventory.select(key - GLFW_KEY_1);
+            }
+        });
+        glfwSetScrollCallback(window, (handle, x, y) -> {
+            if (captured && y != 0.0) {
+                inventory.select(inventory.selected() + (y < 0.0 ? 1 : -1));
+            }
+        });
+        glfwSetMouseButtonCallback(window, (handle, button, action, mods) -> {
+            if (button == GLFW_MOUSE_BUTTON_LEFT && menu.visible()) {
+                if (action == GLFW_PRESS) {
+                    try (var stack = MemoryStack.stackPush()) {
+                        var x = stack.mallocDouble(1);
+                        var y = stack.mallocDouble(1);
+                        glfwGetCursorPos(handle, x, y);
+                        menuPointer(handle, menu, x.get(0), y.get(0), true);
+                    }
+                    syncCursor(handle, menu);
+                } else if (action == GLFW_RELEASE) {
+                    menu.release();
+                }
+            } else if (captured && button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
+                useItem.run();
+            } else if (captured && button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_RELEASE) {
+                releaseItem.run();
+            }
+        });
+        glfwSetWindowFocusCallback(window, (handle, focused) -> {
+            if (!focused) {
+                menu.pause();
+                syncCursor(handle, menu);
+            }
+        });
+        syncCursor(window, menu);
+    }
+
+    private static void menuPointer(long window, GameMenu menu, double x, double y, boolean press) {
+        try (var stack = MemoryStack.stackPush()) {
+            var width = stack.mallocInt(1);
+            var height = stack.mallocInt(1);
+            glfwGetWindowSize(window, width, height);
+            menu.pointer(x, y, width.get(0), height.get(0), press);
+        }
+    }
+
+    private void syncCursor(long window, GameMenu menu) {
+        boolean enabled = !menu.visible();
+        if (captured != enabled) {
+            capture(window, enabled);
+        }
+    }
+
+    private void capture(long window, boolean enabled) {
+        captured = enabled;
+        glfwSetInputMode(window, GLFW_CURSOR, enabled ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
+        hasMousePosition = false;
+    }
+
+    float update(long window, float seconds, Forest forest) {
+        float height = Terrain.height(position.x, position.z) + 1.53f;
+        position.y += (height - position.y) * (1.0f - (float) Math.exp(-seconds * 14.0f));
+        if (!captured) {
+            sprinting = false;
+            return 0.0f;
+        }
+        int forward = pressed(window, GLFW_KEY_W) - pressed(window, GLFW_KEY_S);
+        int right = pressed(window, GLFW_KEY_D) - pressed(window, GLFW_KEY_A);
+        boolean sprint = pressed(window, GLFW_KEY_LEFT_SHIFT) != 0 || pressed(window, GLFW_KEY_RIGHT_SHIFT) != 0;
+        return move(forward, right, sprint, seconds, forest);
+    }
+
+    float move(int forward, int right, boolean sprint, float seconds, Forest forest) {
+        sprinting = false;
+        if (forward == 0 && right == 0) {
+            return 0.0f;
+        }
+        float distance = (sprint ? SPRINT_SPEED : WALK_SPEED) * seconds / (float) Math.hypot(forward, right);
+        float sin = (float) Math.sin(yaw);
+        float cos = (float) Math.cos(yaw);
+        float x = Math.clamp(position.x + (sin * forward + cos * right) * distance, -Terrain.WALK_LIMIT, Terrain.WALK_LIMIT);
+        float z = Math.clamp(position.z + (-cos * forward + sin * right) * distance, -Terrain.WALK_LIMIT, Terrain.WALK_LIMIT);
+        float beforeX = position.x;
+        float beforeZ = position.z;
+        // Se a árvore cair sobre a posição do jogador, deixe-o sair da colisão.
+        boolean blocked = forest.blocksPlayer(position.x, position.z);
+        if (blocked || !forest.blocksPlayer(x, position.z)) {
+            position.x = x;
+        }
+        if (blocked || !forest.blocksPlayer(position.x, z)) {
+            position.z = z;
+        }
+        float traveled = (float) Math.hypot(position.x - beforeX, position.z - beforeZ);
+        sprinting = sprint && traveled > 0.0f;
+        return traveled;
+    }
+
+    boolean sprinting() {
+        return sprinting;
+    }
+
+    void sensitivityScale(float scale) {
+        sensitivityScale = scale;
+    }
+
+    private int pressed(long window, int key) {
+        return glfwGetKey(window, key) == GLFW_PRESS ? 1 : 0;
+    }
+
+    void view(Matrix4f matrix) {
+        float horizontal = (float) Math.cos(pitch);
+        direction.set((float) Math.sin(yaw) * horizontal, (float) Math.sin(pitch),
+                -(float) Math.cos(yaw) * horizontal);
+        matrix.identity().lookAlong(direction.x, direction.y, direction.z, 0.0f, 1.0f, 0.0f)
+                .translate(-position.x, -position.y, -position.z);
+    }
+
+    Vector3f position() {
+        return position;
+    }
+
+    Vector3f aim() {
+        return direction;
+    }
+
+    boolean ignite(IgnitionAim ignition, Forest forest, Meadow meadow, float seconds) {
+        return ignite(ignition, forest, meadow, null, seconds);
+    }
+
+    boolean ignite(IgnitionAim ignition, Forest forest, Meadow meadow, Campfires campfires, float seconds) {
+        if (!captured) {
+            ignition.reset();
+            return false;
+        }
+        ignition.begin();
+        forest.aimFire(ignition, position, direction);
+        meadow.aimFire(ignition, position, direction);
+        if (campfires != null) campfires.aimFire(ignition, position, direction);
+        return ignition.heat(seconds);
+    }
+
+}

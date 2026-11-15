@@ -1,0 +1,33 @@
+newmtl Wood
+Kd 0.48 0.26 0.115
+
+newmtl WoodLight
+Kd 0.6 0.35 0.16
+
+newmtl WoodDark
+Kd 0.34 0.17 0.08
+
+newmtl EndGrain
+Kd 0.69 0.45 0.22
+
+newmtl Leather
+Kd 0.233 0.146 0.101
+
+newmtl LeatherLight
+Kd 0.32 0.218 0.146
+
+newmtl Bronze
+Kd 0.68 0.47 0.22
+
+newmtl Steel
+Kd 0.52 0.6 0.63
+
+newmtl SteelDark
+Kd 0.31 0.37 0.4
+
+newmtl Edge
+Kd 0.83 0.91 0.92
+
+newmtl Rope
+Kd 0.71 0.56 0.34
+

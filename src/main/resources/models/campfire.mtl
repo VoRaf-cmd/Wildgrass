@@ -1,0 +1,12 @@
+newmtl Wood
+Kd 0.37 0.21 0.10
+newmtl WoodLight
+Kd 0.50 0.30 0.14
+newmtl End
+Kd 0.71 0.49 0.25
+newmtl Rock
+Kd 0.35 0.37 0.31
+newmtl RockLight
+Kd 0.49 0.50 0.42
+newmtl Kindling
+Kd 0.58 0.43 0.19
