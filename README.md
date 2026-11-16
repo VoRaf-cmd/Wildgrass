@@ -35,13 +35,15 @@ O arco começa no **slot 4**, com 12 flechas. Segure o botão direito para mirar
 
 A mochila começa com **3 dinamites**. Pressione **E** para colocar a pilha em um dos sete slots, selecione-a e segure o botão direito para ver a trajetória em arco. Clique com o esquerdo para arremessar. O pavio acende durante o voo e a explosão derruba árvores próximas, corta a relva, solta partículas e deixa uma mancha no chão. O impacto balança a câmera e a ferramenta; a intensidade acompanha a opção **Tremor da câmera**.
 
-Na mochila, fabrique **1 fogueira** com **3 gravetos, 2 pedras e 1 fibra seca**. Coloque-a na barra rápida e olhe para o chão: a prévia indica onde ela cabe. Clique para posicioná-la. Depois, equipe o isqueiro, abra a tampa e mantenha a mira sobre a fogueira de perto para acendê-la. Ela ilumina o entorno e produz chama e fumaça. A fogueira permanece acesa durante esta partida; o preparo de alimentos será uma interação futura.
+Na mochila, fabrique **1 fogueira** com **3 gravetos, 2 pedras e 1 fibra seca**. Coloque-a na barra rápida e olhe para o chão: a prévia indica onde ela cabe. Clique para posicioná-la. Depois, equipe o isqueiro, abra a tampa e mantenha a mira sobre a fogueira de perto para acendê-la. Ela ilumina o entorno e permanece acesa durante esta partida.
+
+As vacas procuram relva quando têm fome. Um trecho pastado cresce de novo em cerca de **32 segundos**. Elas fogem por alguns segundos depois de um ferimento e deixam três porções de carne crua ao morrer. Aproxime-se e pressione **F** para recolher uma porção. Com carne crua na mochila, mire numa fogueira acesa e pressione **F** para colocar uma porção no fogo. Quando a barra de cozimento terminar, pressione **F** de novo para recolher a carne cozida.
 
 ## Multiplayer LAN
 
 Os dois computadores precisam estar na mesma rede local ou conectados à mesma sala no Radmin VPN. O anfitrião inicia o jogo, escolhe **Jogar solo**, abre o menu com **Esc** e seleciona **Abrir para LAN**. O jogo passa a escutar pacotes UDP na porta **7777**. O amigo seleciona **Conectar por IP** na tela inicial e digita o IPv4 do anfitrião mostrado no Radmin. Se o Windows pedir autorização de firewall, permita o aplicativo na rede do Radmin.
 
-A sessão aceita **dois jogadores**. Os dois precisam usar a mesma versão do jogo. O personagem remoto acompanha a direção do olhar, mostra o item equipado e anima o uso das ferramentas. A sessão transmite arremessos, disparos, explosões, golpes na vegetação, colocação de fogueiras e o início de incêndios. O inventário e a coleta são locais. As ações são transmitidas enquanto os dois estão conectados, e ainda falta enviar o estado completo da partida para quem entra depois. Se o anfitrião sair, o convidado retorna ao menu inicial.
+A sessão aceita **dois jogadores**. Os dois precisam usar a mesma versão do jogo. O personagem remoto acompanha o olhar, mostra o item equipado e anima o uso das ferramentas. A sessão transmite arremessos, disparos, explosões, golpes na vegetação e o início de incêndios. O anfitrião mantém o estado das vacas, da relva pastada, da carne e do cozimento. Quem entra depois recebe esse estado. A carne recolhida entra no inventário pessoal de quem a pegou. A coleta de toras e outros itens já existentes continua local. Se o anfitrião sair, o convidado retorna ao menu inicial.
 
 ## Modelo e renderização
 

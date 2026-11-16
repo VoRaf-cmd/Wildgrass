@@ -166,8 +166,13 @@ final class Hotbar {
             case FIBER -> FIBER;
             case DYNAMITE -> DYNAMITE;
             case CAMPFIRE -> CAMPFIRE;
+            case RAW_BEEF -> RAW_BEEF;
+            case COOKED_BEEF -> COOKED_BEEF;
         };
     }
+
+    private static final String[] RAW_BEEF = {"  000 ", " 0RRr0", "0Rrrr0", "0rr3r0", " 0000 "};
+    private static final String[] COOKED_BEEF = {"  000 ", " 02320", "032220", "022320", " 0000 "};
 
     static int iconColor(char code) {
         return switch (code) {

@@ -26,6 +26,9 @@ final class NetworkManager implements AutoCloseable {
     private int nextAction;
     private int expectedAction;
     private float retryAction;
+    private int ranchSequence;
+    private int receivedRanch = -1;
+    private byte[] ranchState;
     private DatagramChannel channel;
     private InetSocketAddress peer;
     private Mode mode = Mode.OFFLINE;
@@ -204,6 +207,9 @@ final class NetworkManager implements AutoCloseable {
             outgoing.removeFirst();
             nextAction++;
             retryAction = 0;
+        } else if (mode == Mode.CLIENT && packet.type() == NetworkPacket.RANCH && packet.sequence() > receivedRanch) {
+            receivedRanch = packet.sequence();
+            ranchState = packet.ranch();
         } else if (packet.type() == NetworkPacket.POSITION
                 && (!hasSequence || Integer.compareUnsigned(packet.sequence(), receiveSequence) > 0)) {
             receiveSequence = packet.sequence();
@@ -239,6 +245,21 @@ final class NetworkManager implements AutoCloseable {
     NetworkPacket.Pose remotePose() { return remotePose; }
     NetworkPacket.Action pollAction() { return incoming.pollFirst(); }
 
+    void sendRanch(ByteBuffer state) {
+        if (mode != Mode.HOST || !connected || state.remaining() > NetworkPacket.MAX_BYTES - 18) return;
+        try {
+            send(NetworkPacket.ranch(localNonce, ranchSequence++, state), peer);
+        } catch (IOException error) {
+            dropPeer();
+        }
+    }
+
+    byte[] pollRanch() {
+        byte[] state = ranchState;
+        ranchState = null;
+        return state;
+    }
+
     void action(NetworkPacket.Kind kind, Vector3f point, Vector3f direction, float value) {
         if (connected) outgoing.addLast(new NetworkPacket.Action(kind, point.x, point.y, point.z,
                 direction == null ? 0 : direction.x, direction == null ? 0 : direction.y,
@@ -249,6 +270,8 @@ final class NetworkManager implements AutoCloseable {
         outgoing.clear();
         incoming.clear();
         remotePose = null;
+        ranchState = null;
+        receivedRanch = -1;
         nextAction = 0;
         expectedAction = 0;
         retryAction = 0;

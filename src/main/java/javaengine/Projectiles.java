@@ -13,6 +13,8 @@ final class Projectiles {
     private final Vector3f segment = new Vector3f();
     private final Vector3f previewPoint = new Vector3f();
     private final Vector3f previewVelocity = new Vector3f();
+    private final Vector3f shotStart = new Vector3f();
+    private final Vector3f shotPath = new Vector3f();
     private int nextSlot;
 
     Projectiles() {
@@ -35,7 +37,8 @@ final class Projectiles {
         shot.remote = remote;
     }
 
-    boolean update(float delta, Forest forest, Vector3f player, Inventory inventory, SoundEffect impact) {
+    boolean update(float delta, Forest forest, Vector3f player, Inventory inventory, SoundEffect impact,
+                   Ranch ranch, boolean authority) {
         boolean picked = false;
         for (Shot shot : shots) {
             if (shot.item == null) continue;
@@ -53,7 +56,15 @@ final class Projectiles {
                     picked = true;
                 }
             } else {
-                if (advance(shot.point, shot.velocity, delta, forest)) {
+                shotStart.set(shot.point);
+                boolean collided = advance(shot.point, shot.velocity, delta, forest);
+                shotPath.set(shot.point).sub(shotStart);
+                float length = shotPath.length();
+                if (length > .0001f && ranch.hitRay(shotStart, shotPath.div(length), length,
+                        shot.item == Inventory.Item.ARROW ? 39 : 14, authority)) {
+                    shot.item = null;
+                    impact.play();
+                } else if (collided) {
                     shot.stuck = true;
                     impact.play();
                 } else {

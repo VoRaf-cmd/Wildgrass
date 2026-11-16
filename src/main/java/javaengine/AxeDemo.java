@@ -84,6 +84,9 @@ public final class AxeDemo {
              var dynamiteMesh = loadModel("dynamite.obj", null);
              var blastRing = loadModel("blast-ring.obj", null);
              var campfireMesh = loadModel("campfire.obj", null);
+             var cows = new CowModels();
+             var rawBeef = loadModel("beef-raw.obj", null);
+             var cookedBeef = loadModel("beef-cooked.obj", null);
              var remotePlayer = new RemotePlayer();
              var stump = loadModel("stump.obj", null);
              var scar = loadModel("tree-cut.obj", null);
@@ -119,6 +122,10 @@ public final class AxeDemo {
              var dynamiteFuse = new SoundEffect("dynamite-fuse.wav");
              var dynamiteBoom = new SoundEffect("dynamite-blast.wav");
              var campfirePlace = new SoundEffect("campfire-place.wav");
+             var cowMoo = new SoundEffect("cow-moo.wav");
+             var cowAlarm = new SoundEffect("cow-alarm.wav");
+             var cowChew = new SoundEffect("cow-chew.wav");
+             var cowHoof = new SoundEffect("cow-hoof.wav");
              var network = new NetworkManager();
              var stack = MemoryStack.stackPush()) {
             var camera = new FirstPersonCamera();
@@ -130,6 +137,7 @@ public final class AxeDemo {
             var dynamite = new Dynamite();
             var blast = new BlastEffects();
             var campfires = new Campfires();
+            var ranch = new Ranch();
             var campfireRequest = new boolean[1];
             var stoneRequest = new boolean[1];
             var wind = new Wind();
@@ -155,11 +163,14 @@ public final class AxeDemo {
             remoteItems[Inventory.Item.LOG.ordinal()] = log;
             remoteItems[Inventory.Item.STICK.ordinal()] = chip;
             remoteItems[Inventory.Item.FIBER.ordinal()] = grassFragment;
+            remoteItems[Inventory.Item.RAW_BEEF.ordinal()] = rawBeef;
+            remoteItems[Inventory.Item.COOKED_BEEF.ordinal()] = cookedBeef;
             var remoteIgnition = new IgnitionAim();
             var eventPoint = new Vector3f();
             var eventDirection = new Vector3f();
             java.util.function.Consumer<Vector3f> publishBlast = point -> {
                 remotePlayer.reactToBlast(point);
+                if (network.mode() != NetworkManager.Mode.CLIENT) ranch.blast(point);
                 network.action(BLAST, point, null, 0);
             };
             long seenRemoteRevision = 0;
@@ -205,11 +216,13 @@ public final class AxeDemo {
             double previous = glfwGetTime();
             float ambientTimer = 0.0f;
             float stepTimer = 0.0f;
+            boolean interactWasDown = false;
             int volume = settings.get(GameSettings.Option.VOLUME);
             int vsync = settings.get(GameSettings.Option.VSYNC);
             SoundEffect[] sounds = {swingSound, hitSound, splitSound, landSound, pickupSound, lighterSound,
                     ignitionSound, windSound, fireSound, slashSound, cutSound, rustleSound, bowReady, bowDraw, bowShot,
-                    projectileHit, dynamiteToss, dynamiteFuse, dynamiteBoom, campfirePlace};
+                    projectileHit, dynamiteToss, dynamiteFuse, dynamiteBoom, campfirePlace, cowMoo, cowAlarm,
+                    cowChew, cowHoof};
             for (SoundEffect sound : sounds) {
                 sound.masterVolume(volume);
             }
@@ -264,6 +277,7 @@ public final class AxeDemo {
                     }
                     case DISCONNECT -> {
                         network.close();
+                        ranch.disconnected();
                         menu.networkDisconnected("Você saiu da sessão.");
                         camera.refreshCursor(window, menu);
                     }
@@ -283,6 +297,7 @@ public final class AxeDemo {
                 if (equipped == Inventory.Item.BOW && bow.drawing() && !menu.visible()) flags |= NetworkPacket.DRAWING;
                 network.update(delta, camera.position(), camera.yaw(), camera.pitch(), equipped, flags);
                 if (previousMode == NetworkManager.Mode.CLIENT && network.mode() == NetworkManager.Mode.OFFLINE) {
+                    ranch.disconnected();
                     menu.networkDisconnected(network.message());
                     camera.refreshCursor(window, menu);
                 } else if (network.mode() == NetworkManager.Mode.CLIENT && network.connected()
@@ -318,6 +333,7 @@ public final class AxeDemo {
                         case BLAST -> {
                             remotePlayer.reactToBlast(eventPoint);
                             blast.explode(eventPoint, camera.position(), forest, meadow, motion, dynamiteBoom);
+                            if (network.mode() == NetworkManager.Mode.HOST) ranch.blast(eventPoint);
                         }
                         case DYNAMITE -> {
                             remotePlayer.use(Inventory.Item.DYNAMITE);
@@ -352,6 +368,8 @@ public final class AxeDemo {
                             campfires.aimFire(remoteIgnition, eventPoint, eventDirection);
                             if (remoteIgnition.heat(0.5f)) ignitionSound.play();
                         }
+                        case COW_HIT, COOK, COLLECT_MEAT, MEAT_GRANTED, COOK_RESULT ->
+                                ranch.receiveAction(event, network, campfires, forest, eventPoint, eventDirection);
                     }
                 }
                 glfwGetFramebufferSize(window, windowWidth, windowHeight);
@@ -362,6 +380,7 @@ public final class AxeDemo {
                     continue;
                 }
                 boolean playing = !menu.visible();
+                boolean authority = network.mode() != NetworkManager.Mode.CLIENT;
                 boolean sprinting = camera.sprinting();
                 camera.view(view);
                 Vector3f eye = camera.position();
@@ -394,6 +413,9 @@ public final class AxeDemo {
                 float zoomFov = bow.fieldOfView(0.0f);
                 camera.sensitivityScale((float) (Math.tan(zoomFov * 0.5f) / Math.tan(Sky.FOV * 0.5f)));
                 if (!torchEquipped) torch.stow();
+                boolean interactDown = glfwGetKey(window, GLFW_KEY_F) == GLFW_PRESS;
+                if (playing && interactDown && !interactWasDown) ranch.interact(network, inventory, campfires, eye, aim, pickupSound);
+                interactWasDown = interactDown;
                 if (playing) {
                     float shotSpeed = bow.update(delta, inventory, eye, aim, projectiles, bowReady, bowShot);
                     if (shotSpeed > 0) network.action(ARROW, eye, aim, shotSpeed);
@@ -420,7 +442,11 @@ public final class AxeDemo {
                     }
                     motion.stride(traveled, sprinting, delta);
                     if (swing.reachedImpact()) {
-                        TreeTarget hit = forest.chop(eye, aim, impact);
+                        float reach = Math.min(2.65f, forest.projectileDistance(eye, aim, 2.65f));
+                        boolean animalHit = ranch.hitRay(eye, aim, reach, 45, authority);
+                        if (animalHit && !authority) network.action(COW_HIT, eye, aim, 0);
+                        if (animalHit) motion.hit();
+                        TreeTarget hit = animalHit ? null : forest.chop(eye, aim, impact);
                         if (hit != null) {
                             network.action(CHOP, eye, aim, 0);
                             hitSound.play();
@@ -434,10 +460,16 @@ public final class AxeDemo {
                     if (!macheteEquipped) {
                         machete.cancel();
                     }
-                    if (machete.update(delta) && meadow.cut(eye, aim, chips)) {
-                        network.action(CUT, eye, aim, 0);
-                        cutSound.play();
-                        motion.cut();
+                    if (machete.update(delta)) {
+                        float reach = Math.min(2.65f, forest.projectileDistance(eye, aim, 2.65f));
+                        if (ranch.hitRay(eye, aim, reach, 30, authority)) {
+                            if (!authority) network.action(COW_HIT, eye, aim, 0);
+                            motion.hit();
+                        } else if (meadow.cut(eye, aim, chips)) {
+                            network.action(CUT, eye, aim, 0);
+                            cutSound.play();
+                            motion.cut();
+                        }
                     }
                     if (lighterEquipped) {
                         lighter.update(delta);
@@ -462,15 +494,17 @@ public final class AxeDemo {
                     dynamite.update(delta, projectiles, forest, camera.position(), meadow, blast, motion,
                             dynamiteBoom, publishBlast);
                     blast.update(delta);
-                    campfires.update(delta);
+                    campfires.update(delta, authority);
                     meadow.update(delta, wind.strength());
                     chips.update(delta);
                     motion.update(delta);
                     forest.update(delta, meadow, chips, motion, landSound);
                     boolean picked = projectiles.update(delta, forest, camera.position(),
-                            playing ? inventory : null, projectileHit);
+                            playing ? inventory : null, projectileHit, ranch, authority);
                     if ((playing && forest.collect(delta, eye, inventory)) || picked) pickupSound.play();
                 }
+                ranch.update(delta, playing, network, meadow, forest, campfires, inventory, camera.position(),
+                        chips, cowMoo, cowAlarm, cowChew, cowHoof, pickupSound);
                 if (!playing) {
                     stoneRequest[0] = false;
                     campfireRequest[0] = false;
@@ -512,9 +546,11 @@ public final class AxeDemo {
                 remotePlayer.draw(shader, remoteItems, stringMesh, lighterLid, fire,
                         network.mode() == NetworkManager.Mode.HOST, buffer);
                 birds.draw(shader, birdBody, birdWing, buffer);
-                chips.draw(shader, chip, dust, grassFragment, buffer);
+                cows.draw(shader, ranch.cows(), rawBeef, buffer);
+                chips.draw(shader, chip, dust, grassFragment, rawBeef, buffer);
                 meadow.drawFire(shader, fire, eye, aim, buffer);
                 campfires.draw(shader, campfireMesh, fire, buffer);
+                campfires.drawFood(shader, rawBeef, cookedBeef, buffer);
                 projectiles.draw(shader, arrowMesh, stoneMesh, buffer);
                 dynamite.drawThrown(shader, dynamiteMesh, marker, buffer);
                 blast.draw(shader, marker, stoneMesh, smoke, blastRing, buffer);
@@ -531,7 +567,8 @@ public final class AxeDemo {
                 // Os itens equipados são desenhados à frente do cenário, no espaço da câmera.
                 if (playing && (axeEquipped || lighterEquipped || macheteEquipped || bowEquipped
                         || torchEquipped || dynamiteEquipped || campfireEquipped
-                        || inventory.equipped() == Inventory.Item.STONE)) {
+                        || inventory.equipped() == Inventory.Item.STONE
+                        || inventory.equipped() == Inventory.Item.RAW_BEEF || inventory.equipped() == Inventory.Item.COOKED_BEEF)) {
                     glClear(GL_DEPTH_BUFFER_BIT);
                     float bob = settings.fraction(GameSettings.Option.ITEM_BOB);
                     if (camera.crouching()) bob *= 0.58f;
@@ -559,13 +596,17 @@ public final class AxeDemo {
                         dynamite.drawHeld(shader, dynamiteMesh, marker, aspect, buffer);
                     } else if (campfireEquipped) {
                         campfires.drawHeld(shader, campfireMesh, aspect, buffer);
-                    } else {
+                    } else if (inventory.equipped() == Inventory.Item.STONE) {
                         model.translation(0.13f * aspect, -0.36f, -0.62f).rotateY(-0.28f).scale(0.15f);
                         shader.draw(stoneMesh, model, false, buffer);
+                    } else {
+                        model.translation(.15f * aspect, -.30f, -.62f).rotateY(-.35f).rotateX(.39f).scale(.65f);
+                        shader.draw(inventory.equipped() == Inventory.Item.RAW_BEEF ? rawBeef : cookedBeef, model, false, buffer);
                     }
                 }
                 if (playing) {
                     framebuffer.drawCrosshair();
+                    framebuffer.drawRanchIndicator(ranch.indicator(inventory, campfires, eye, aim));
                     if (bowEquipped) framebuffer.drawBowIndicator(bow.charge(), bow.drawing(), bow.aimAmount(),
                             inventory.total(Inventory.Item.ARROW));
                     framebuffer.drawHotbar(inventory, delta);
@@ -579,7 +620,7 @@ public final class AxeDemo {
         }
     }
 
-    private static ObjModel loadModel(String bundledName, Path customPath) throws IOException {
+    static ObjModel loadModel(String bundledName, Path customPath) throws IOException {
         if (customPath != null) {
             try (var reader = Files.newBufferedReader(customPath)) {
                 return ObjModel.read(reader, name -> Files.newBufferedReader(customPath.getParent().resolve(name)));

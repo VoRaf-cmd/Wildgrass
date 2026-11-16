@@ -5,7 +5,7 @@ import java.nio.ByteBuffer;
 /** Small, versioned UDP messages. All fields use network byte order. */
 final class NetworkPacket {
     static final int MAGIC = 0x57475253; // WGRS
-    static final byte VERSION = 3;
+    static final byte VERSION = 4;
     static final byte HELLO = 1;
     static final byte WELCOME = 2;
     static final byte POSITION = 3;
@@ -13,7 +13,8 @@ final class NetworkPacket {
     static final byte BUSY = 5;
     static final byte ACTION = 6;
     static final byte ACK = 7;
-    static final int MAX_BYTES = 64;
+    static final byte RANCH = 8;
+    static final int MAX_BYTES = 1200;
 
     private NetworkPacket() { }
 
@@ -45,6 +46,10 @@ final class NetworkPacket {
         return header(ACK, 18).putLong(nonce).putInt(sequence).flip();
     }
 
+    static ByteBuffer ranch(long nonce, int sequence, ByteBuffer state) {
+        return header(RANCH, 18 + state.remaining()).putLong(nonce).putInt(sequence).put(state).flip();
+    }
+
     static ByteBuffer goodbye(long nonce) {
         return header(GOODBYE, 14).putLong(nonce).flip();
     }
@@ -70,8 +75,18 @@ final class NetworkPacket {
             case ACK -> bytes.remaining() == 12
                     ? new Message(type, bytes.getLong(), 0, bytes.getInt(), null, null) : null;
             case BUSY -> bytes.remaining() == 0 ? new Message(type, 0, 0, 0, null, null) : null;
+            case RANCH -> ranchMessage(bytes);
             default -> null;
         };
+    }
+
+    private static Message ranchMessage(ByteBuffer bytes) {
+        if (bytes.remaining() < 12) return null;
+        long nonce = bytes.getLong();
+        int sequence = bytes.getInt();
+        byte[] state = new byte[bytes.remaining()];
+        bytes.get(state);
+        return new Message(RANCH, nonce, 0, sequence, null, null, state);
     }
 
     private static Message positionMessage(ByteBuffer bytes) {
@@ -108,11 +123,15 @@ final class NetworkPacket {
     static final int LIT = 1, AIMING = 2, DRAWING = 4, CROUCHING = 8;
     private static final int POSE_FLAGS = LIT | AIMING | DRAWING | CROUCHING;
     static final Inventory.Item[] ITEMS = Inventory.Item.values();
-    enum Kind { USE, BLAST, DYNAMITE, ARROW, STONE, CHOP, CUT, CAMPFIRE, IGNITE }
+    enum Kind { USE, BLAST, DYNAMITE, ARROW, STONE, CHOP, CUT, CAMPFIRE, IGNITE,
+        COW_HIT, COOK, COLLECT_MEAT, MEAT_GRANTED, COOK_RESULT }
     private static final Kind[] KINDS = Kind.values();
     record Pose(float x, float y, float z, float yaw, float pitch, int item, int flags) { }
     record Action(Kind kind, float x, float y, float z, float dx, float dy, float dz, float value) { }
-    record Message(byte type, long nonce, long otherNonce, int sequence, Pose pose, Action action) {
+    record Message(byte type, long nonce, long otherNonce, int sequence, Pose pose, Action action, byte[] ranch) {
+        Message(byte type, long nonce, long otherNonce, int sequence, Pose pose, Action action) {
+            this(type, nonce, otherNonce, sequence, pose, action, null);
+        }
         float z() { return pose.z(); }
     }
 }

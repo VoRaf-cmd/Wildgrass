@@ -61,16 +61,48 @@ final class WoodChips {
         }
     }
 
+    void hoofDust(Vector3f point, boolean gallop) {
+        for (int i = 0; i < (gallop ? 5 : 2); i++) {
+            Chip chip = spawn(true);
+            chip.position.set(point).add(random.nextFloat(-.20f, .20f), .07f, random.nextFloat(-.17f, .17f));
+            chip.velocity.set(random.nextFloat(-.7f, .7f), random.nextFloat(.25f, .78f),
+                    random.nextFloat(-.7f, .7f));
+            chip.size *= gallop ? 2.1f : 1.25f;
+        }
+    }
+
+    void graze(Vector3f mouth, Vector3f forward) {
+        for (int i = 0; i < 13; i++) {
+            Chip blade = spawn(false);
+            blade.grass = true;
+            blade.position.set(mouth).add(random.nextFloat(-.15f, .15f), .06f, random.nextFloat(-.15f, .15f));
+            blade.velocity.set(forward.x * .6f + random.nextFloat(-.8f, .8f),
+                    random.nextFloat(.35f, 1.6f), forward.z * .6f + random.nextFloat(-.8f, .8f));
+            blade.size *= .75f;
+        }
+    }
+
     private Chip spawn(boolean dust) {
         Chip chip = chips[next];
         next = (next + 1) % chips.length;
         chip.dust = dust;
         chip.grass = false;
+        chip.meat = false;
         chip.life = dust ? random.nextFloat(0.26f, 0.65f) : random.nextFloat(0.32f, 0.74f);
         chip.size = dust ? random.nextFloat(0.017f, 0.036f) : random.nextFloat(0.022f, 0.067f);
         chip.angle = random.nextFloat(0.0f, 6.28f);
         chip.spin = random.nextFloat(-14.0f, 14.0f);
         return chip;
+    }
+
+    void animalHit(Vector3f point, boolean dead) {
+        for (int i = 0; i < (dead ? 21 : 9); i++) {
+            Chip chip = spawn(false);
+            chip.meat = true;
+            chip.position.set(point);
+            chip.velocity.set(random.nextFloat(-1.6f, 1.6f), random.nextFloat(.35f, 2.0f),
+                    random.nextFloat(-1.6f, 1.6f));
+        }
     }
 
     void update(float delta) {
@@ -91,12 +123,12 @@ final class WoodChips {
         }
     }
 
-    void draw(SceneShader shader, ObjModel wood, ObjModel dust, ObjModel grass, FloatBuffer buffer) {
+    void draw(SceneShader shader, ObjModel wood, ObjModel dust, ObjModel grass, ObjModel meat, FloatBuffer buffer) {
         for (Chip chip : chips) {
             if (chip.life > 0) {
                 float size = chip.size * Math.min(1.0f, chip.life * 8.0f);
                 model.translation(chip.position).rotateY(chip.angle).rotateX(chip.angle * 0.65f).scale(size);
-                shader.draw(chip.dust ? dust : chip.grass ? grass : wood, model, false, buffer);
+                shader.draw(chip.dust ? dust : chip.grass ? grass : chip.meat ? meat : wood, model, false, buffer);
             }
         }
     }
@@ -110,5 +142,6 @@ final class WoodChips {
         float spin;
         boolean dust;
         boolean grass;
+        boolean meat;
     }
 }

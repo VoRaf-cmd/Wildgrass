@@ -60,6 +60,28 @@ final class PixelFramebuffer implements AutoCloseable {
         hotbar.draw(width, height, inventory, delta);
     }
 
+    void drawRanchIndicator(float status) {
+        if (status < 0) return;
+        int x = width / 2;
+        int y = height / 2 + 9;
+        glEnable(GL_SCISSOR_TEST);
+        glClearColor(.10f, .12f, .095f, 1);
+        glScissor(x - 11, y, 22, 7);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glClearColor(.98f, .79f, .43f, 1);
+        if (status >= 1) {
+            glScissor(x - 1, y + 1, 1, 5);
+            glClear(GL_COLOR_BUFFER_BIT);
+            glScissor(x, y + 5, 2, 1);
+            glClear(GL_COLOR_BUFFER_BIT);
+            glScissor(x, y + 3, 1, 1);
+        } else {
+            glScissor(x - 10, y + 2, Math.max(1, Math.round(status * 20)), 3);
+        }
+        glClear(GL_COLOR_BUFFER_BIT);
+        glDisable(GL_SCISSOR_TEST);
+    }
+
     void drawBowIndicator(float charge, boolean drawing, float aim, int arrows) {
         glEnable(GL_SCISSOR_TEST);
         int x = width / 2;
