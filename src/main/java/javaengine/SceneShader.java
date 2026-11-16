@@ -13,8 +13,13 @@ final class SceneShader implements AutoCloseable {
             layout(location = 1) in vec3 normal;
             layout(location = 2) in vec3 color;
             layout(location = 3) in float growth;
+            layout(location = 4) in vec4 joints;
+            layout(location = 5) in vec4 weights;
             uniform mat4 viewProjection;
             uniform mat4 model;
+            uniform bool skinned;
+            uniform mat4 bones[%d];
+            uniform vec3 clayTint;
             uniform int vegetation;
             uniform float plantHeight;
             uniform float windTime;
@@ -29,6 +34,13 @@ final class SceneShader implements AutoCloseable {
             out vec2 patchPosition;
             void main() {
                 vec3 plant = position;
+                vec3 surfaceNormal = normal;
+                if (skinned) {
+                    mat4 skin = bones[int(joints.x)] * weights.x + bones[int(joints.y)] * weights.y
+                              + bones[int(joints.z)] * weights.z + bones[int(joints.w)] * weights.w;
+                    plant = (skin * vec4(plant, 1.0)).xyz;
+                    surfaceNormal = mat3(skin) * surfaceNormal;
+                }
                 if (vegetation == 1 && growth >= 0.0) {
                     plant.y -= growth * (1.0 - plantHeight);
                 }
@@ -60,13 +72,13 @@ final class SceneShader implements AutoCloseable {
                 }
                 gl_Position = viewProjection * world;
                 worldPosition = world.xyz;
-                worldNormal = transpose(inverse(mat3(model))) * normal;
-                surfaceColor = color;
+                worldNormal = transpose(inverse(mat3(model))) * surfaceNormal;
+                surfaceColor = skinned ? clayTint * color : color;
                 viewDepth = gl_Position.w;
                 bladeGrowth = growth;
                 patchPosition = position.xz;
             }
-            """;
+            """.formatted(ClayAvatar.BONE_COUNT);
 
     private static final String FRAGMENT = """
             #version 330 core
@@ -159,6 +171,7 @@ final class SceneShader implements AutoCloseable {
     private final int opacity;
     private final int blastMarks;
     private final int blastMarkCount;
+    private final int skinned, bones, clayTint;
 
     SceneShader() {
         program = link(VERTEX, FRAGMENT);
@@ -181,6 +194,9 @@ final class SceneShader implements AutoCloseable {
         opacity = glGetUniformLocation(program, "opacity");
         blastMarks = glGetUniformLocation(program, "blastMarks[0]");
         blastMarkCount = glGetUniformLocation(program, "blastMarkCount");
+        skinned = glGetUniformLocation(program, "skinned");
+        bones = glGetUniformLocation(program, "bones[0]");
+        clayTint = glGetUniformLocation(program, "clayTint");
     }
 
     static int link(String vertexSource, String fragmentSource) {
@@ -255,6 +271,14 @@ final class SceneShader implements AutoCloseable {
 
     void draw(ObjModel mesh, Matrix4f matrix, boolean isDisplay, FloatBuffer buffer) {
         draw(mesh, matrix, isDisplay, 0.0f, false, 0, 1.0f, 1.0f, buffer);
+    }
+
+    void drawClay(ObjModel mesh, Matrix4f matrix, float[] skeleton, int tint, FloatBuffer buffer) {
+        glUniform1i(skinned, 1);
+        glUniformMatrix4fv(bones, false, skeleton);
+        glUniform3f(clayTint, ((tint >> 16) & 255) / 255f, ((tint >> 8) & 255) / 255f, (tint & 255) / 255f);
+        draw(mesh, matrix, false, 0, false, 0, 1, 1, buffer);
+        glUniform1i(skinned, 0);
     }
 
     void drawCharred(ObjModel mesh, Matrix4f matrix, float burn, FloatBuffer buffer) {

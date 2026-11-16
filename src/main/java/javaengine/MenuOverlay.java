@@ -123,6 +123,8 @@ final class MenuOverlay implements AutoCloseable {
                 paintInventory(graphics, menu);
             } else if (menu.screen() == GameMenu.Screen.SETTINGS) {
                 paintSettings(graphics, menu);
+            } else if (menu.screen() == GameMenu.Screen.CONNECT) {
+                paintConnect(graphics, menu);
             } else {
                 paintActions(graphics, menu);
             }
@@ -204,11 +206,41 @@ final class MenuOverlay implements AutoCloseable {
         g.setColor(GOLD);
         g.fillRect(65, 211, 47, 3);
 
-        String[] labels = {title ? "Jogar" : "Continuar", "Configurações", "Sair do jogo"};
+        String[] labels = {title ? "Jogar solo" : "Continuar",
+                title ? "Conectar por IP" : menu.clientSession() ? "Sair da sessão"
+                        : menu.hostingSession() ? "LAN já aberta" : "Abrir para LAN",
+                "Configurações", "Sair do jogo"};
         for (int row = 0; row < labels.length; row++) {
             button(g, menu.bounds(row), labels[row], row == menu.selection(), row == 0);
         }
+        if (!menu.networkMessage().isEmpty()) {
+            g.setColor(GOLD);
+            g.setFont(body.deriveFont(16.0f));
+            g.drawString(menu.networkMessage(), 65, 475);
+        }
         hint(g, "Setas para navegar   ·   Enter para selecionar");
+    }
+
+    private void paintConnect(Graphics2D g, GameMenu menu) {
+        g.setColor(CREAM);
+        g.setFont(heading.deriveFont(63.0f));
+        g.drawString("CONECTAR POR IP", 60, 153);
+        g.setColor(MUTED);
+        g.setFont(body.deriveFont(19.0f));
+        g.drawString("Digite o IPv4 do anfitrião no Radmin VPN", 65, 198);
+        Rectangle input = new Rectangle(65, 218, 365, 51);
+        frame(g, input, true, false);
+        g.setColor(menu.ipAddress().isEmpty() ? MUTED : CREAM);
+        g.setFont(body.deriveFont(23.0f));
+        g.drawString(menu.ipAddress().isEmpty() ? "Ex.: 26.12.34.56" : menu.ipAddress(), 79, 251);
+        button(g, menu.bounds(0), "Conectar · UDP 7777", menu.selection() == 0, true);
+        button(g, menu.bounds(1), "Voltar", menu.selection() == 1, false);
+        if (!menu.networkMessage().isEmpty()) {
+            g.setColor(GOLD);
+            g.setFont(body.deriveFont(16.0f));
+            g.drawString(menu.networkMessage(), 65, 456);
+        }
+        hint(g, "Digite o IP ou cole com Ctrl+V   ·   Esc para voltar");
     }
 
     private void paintSettings(Graphics2D g, GameMenu menu) {

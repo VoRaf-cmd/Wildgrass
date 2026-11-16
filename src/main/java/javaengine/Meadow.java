@@ -10,6 +10,8 @@ import java.util.Random;
 
 final class Meadow implements AutoCloseable {
     private static final int GRID = 29;
+    static final int GRAZING_BYTES = GRID * GRID;
+    private static final float REGROW_SECONDS = 32.0f;
     private static final float CELL_SIZE = 1.65f;
     private static final float HALF_CELL = CELL_SIZE * 0.5f;
     private static final float BORDER_DEPTH = 5.4f;
@@ -205,6 +207,48 @@ final class Meadow implements AutoCloseable {
         return patches[row][col];
     }
 
+    boolean findGrazing(Vector3f cow, Forest forest, Vector3f destination) {
+        float nearest = 9 * 9;
+        boolean found = false;
+        for (Patch[] row : patches) for (Patch patch : row) {
+            float distance = patch.distanceSquared(cow);
+            if (distance >= nearest || !edible(patch) || forest.blocksPlayer(patch.x, patch.z)) continue;
+            nearest = distance;
+            destination.set(patch.x, patch.y, patch.z);
+            found = true;
+        }
+        return found;
+    }
+
+    boolean graze(float x, float z) {
+        Patch patch = patchAt(x, z);
+        if (!edible(patch)) return false;
+        patch.grazeTime = REGROW_SECONDS;
+        return true;
+    }
+
+    private static boolean edible(Patch patch) {
+        return patch != null && patch.tall && !patch.cut && patch.fire.canIgnite() && patch.grazeTime < 4;
+    }
+
+    void regrow(float delta) {
+        for (Patch[] row : patches) for (Patch patch : row) {
+            patch.grazeTime = Math.max(0, patch.grazeTime - delta);
+        }
+    }
+
+    void writeGrazing(java.nio.ByteBuffer state) {
+        for (Patch[] row : patches) for (Patch patch : row) {
+            state.put((byte) Math.round(patch.grazeTime * 255 / REGROW_SECONDS));
+        }
+    }
+
+    void readGrazing(java.nio.ByteBuffer state) {
+        for (Patch[] row : patches) for (Patch patch : row) {
+            patch.grazeTime = Byte.toUnsignedInt(state.get()) * REGROW_SECONDS / 255;
+        }
+    }
+
     float fireProximity(Vector3f player) {
         float distanceSquared = 144.0f;
         for (Patch[] row : patches) {
@@ -232,7 +276,8 @@ final class Meadow implements AutoCloseable {
             for (Patch patch : row) {
                 if (patch.visible(eye, aim)) {
                     float charAmount = patch.fire.charAmount();
-                    float height = patch.cutHeight * (1.0f - charAmount * 0.78f);
+                    float height = patch.cutHeight * (1.0f - charAmount * 0.78f)
+                            * (1 - .83f * patch.grazeTime / REGROW_SECONDS);
                     shader.drawGrass(patch.mesh, pose.translation(patch.x, patch.y, patch.z), height, charAmount, buffer);
                 }
             }
@@ -287,6 +332,7 @@ final class Meadow implements AutoCloseable {
         final ObjModel mesh;
         boolean cut;
         float cutHeight = 1.0f;
+        float grazeTime;
 
         Patch(float x, float z, boolean tall, Random random) {
             this.x = x;

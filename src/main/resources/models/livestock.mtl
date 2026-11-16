@@ -1,0 +1,26 @@
+newmtl Brown
+Kd 0.56 0.31 0.16
+newmtl Sepia
+Kd 0.32 0.16 0.09
+newmtl Milk
+Kd 0.89 0.84 0.72
+newmtl Ink
+Kd 0.145 0.128 0.112
+newmtl Udder
+Kd 0.74 0.44 0.39
+newmtl Sand
+Kd 0.71 0.51 0.32
+newmtl Horn
+Kd 0.82 0.74 0.54
+newmtl Hoof
+Kd 0.20 0.14 0.11
+newmtl Roast
+Kd 0.48 0.23 0.10
+newmtl Crust
+Kd 0.39 0.16 0.065
+newmtl Beef
+Kd 0.72 0.16 0.15
+newmtl Fat
+Kd 0.86 0.66 0.43
+newmtl Marble
+Kd 0.88 0.39 0.29

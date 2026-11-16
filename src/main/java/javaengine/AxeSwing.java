@@ -17,10 +17,12 @@ final class AxeSwing {
     private float elapsed = SWING_END;
     private float previousElapsed = SWING_END;
 
-    void start() {
+    boolean start() {
         if (elapsed >= SWING_END) {
             elapsed = 0.0f;
+            return true;
         }
+        return false;
     }
 
     void cancel() {

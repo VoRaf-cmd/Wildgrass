@@ -13,7 +13,8 @@ final class GameMenu {
     static final int BACK = OPTIONS.length;
     static final int RESET = BACK + 1;
 
-    enum Screen { TITLE, PLAYING, PAUSE, SETTINGS, INVENTORY }
+    enum Screen { TITLE, PLAYING, PAUSE, SETTINGS, INVENTORY, CONNECT }
+    enum NetworkAction { NONE, HOST, CONNECT, CANCEL, DISCONNECT }
 
     private final GameSettings settings;
     private final Inventory inventory;
@@ -25,6 +26,11 @@ final class GameMenu {
     private int dragged = -1;
     private int revision;
     private boolean quit;
+    private NetworkAction networkAction = NetworkAction.NONE;
+    private final StringBuilder ipAddress = new StringBuilder();
+    private String networkMessage = "";
+    private boolean hostingSession;
+    private boolean clientSession;
 
     GameMenu(GameSettings settings) {
         this(settings, new Inventory());
@@ -37,6 +43,59 @@ final class GameMenu {
 
     Inventory inventory() { return inventory; }
     int picked() { return picked; }
+    String ipAddress() { return ipAddress.toString(); }
+    String networkMessage() { return networkMessage; }
+    boolean hostingSession() { return hostingSession; }
+    boolean clientSession() { return clientSession; }
+
+    NetworkAction consumeNetworkAction() {
+        NetworkAction action = networkAction;
+        networkAction = NetworkAction.NONE;
+        return action;
+    }
+
+    void networkMessage(String text) {
+        if (!networkMessage.equals(text)) {
+            networkMessage = text;
+            revision++;
+        }
+    }
+
+    void networkConnected() {
+        clientSession = true;
+        networkMessage("Conectado ao host");
+        if (screen == Screen.CONNECT) show(Screen.PLAYING, 0);
+    }
+
+    void networkHostStarted() {
+        hostingSession = true;
+        show(Screen.PLAYING, 0);
+    }
+
+    void networkDisconnected(String text) {
+        hostingSession = false;
+        clientSession = false;
+        show(Screen.TITLE, 0);
+        networkMessage(text);
+    }
+
+    void charInput(int codepoint) {
+        if (screen == Screen.CONNECT && (codepoint >= '0' && codepoint <= '9' || codepoint == '.')
+                && ipAddress.length() < 15) {
+            ipAddress.appendCodePoint(codepoint);
+            revision++;
+        }
+    }
+
+    void pasteIp(String text) {
+        if (screen != Screen.CONNECT || text == null) return;
+        String candidate = text.trim();
+        if (candidate.length() <= 15 && candidate.matches("[0-9.]+")) {
+            ipAddress.setLength(0);
+            ipAddress.append(candidate);
+            revision++;
+        }
+    }
 
     GameSettings settings() {
         return settings;
@@ -51,7 +110,8 @@ final class GameMenu {
     }
 
     boolean titleBackdrop() {
-        return screen == Screen.TITLE || screen == Screen.SETTINGS && settingsFrom == Screen.TITLE;
+        return screen == Screen.TITLE || screen == Screen.CONNECT
+                || screen == Screen.SETTINGS && settingsFrom == Screen.TITLE;
     }
 
     boolean quitRequested() {
@@ -68,7 +128,8 @@ final class GameMenu {
 
     int rowCount() {
         if (screen == Screen.INVENTORY) return Inventory.CAPACITY + 3;
-        return screen == Screen.SETTINGS ? RESET + 1 : 3;
+        if (screen == Screen.CONNECT) return 2;
+        return screen == Screen.SETTINGS ? RESET + 1 : 4;
     }
 
     Rectangle bounds(int row) {
@@ -76,6 +137,7 @@ final class GameMenu {
             if (row >= Inventory.CAPACITY) return new Rectangle(574, 152 + (row - Inventory.CAPACITY) * 71, 271, 58);
             return new Rectangle(92 + row % 7 * 61, row < 7 ? 144 : 245 + (row / 7 - 1) * 61, 53, 53);
         }
+        if (screen == Screen.CONNECT) return new Rectangle(65, 310 + row * 55, 315, 44);
         if (screen != Screen.SETTINGS) {
             return new Rectangle(65, 245 + row * 55, 315, 44);
         }
@@ -87,6 +149,22 @@ final class GameMenu {
 
     void key(int key, int action) {
         if (action == GLFW_RELEASE) {
+            return;
+        }
+        if (screen == Screen.CONNECT) {
+            if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
+                networkAction = NetworkAction.CANCEL;
+                show(Screen.TITLE, 0);
+            } else if (key == GLFW_KEY_BACKSPACE && ipAddress.length() > 0) {
+                ipAddress.deleteCharAt(ipAddress.length() - 1);
+                revision++;
+            } else if (key == GLFW_KEY_UP || key == GLFW_KEY_DOWN || key == GLFW_KEY_TAB) {
+                selected = Math.floorMod(selection() + (key == GLFW_KEY_UP ? -1 : 1), rowCount());
+                hovered = -1;
+                revision++;
+            } else if (action == GLFW_PRESS && (key == GLFW_KEY_ENTER || key == GLFW_KEY_KP_ENTER)) {
+                activate(selection());
+            }
             return;
         }
         if (key == GLFW_KEY_E && action == GLFW_PRESS) {
@@ -101,6 +179,7 @@ final class GameMenu {
                 case INVENTORY -> show(Screen.PLAYING, 0);
                 case SETTINGS -> returnFromSettings();
                 case TITLE -> { }
+                case CONNECT -> { }
             }
             return;
         }
@@ -182,6 +261,16 @@ final class GameMenu {
     }
 
     private void activate(int row) {
+        if (screen == Screen.CONNECT) {
+            if (row == 0) {
+                networkAction = NetworkAction.CONNECT;
+                networkMessage("Conectando...");
+            } else {
+                networkAction = NetworkAction.CANCEL;
+                show(Screen.TITLE, 0);
+            }
+            return;
+        }
         if (screen == Screen.INVENTORY) {
             if (row >= Inventory.CAPACITY) {
                 inventory.craft(row == Inventory.CAPACITY ? Inventory.Item.ARROW
@@ -212,6 +301,15 @@ final class GameMenu {
         if (row == 0) {
             show(Screen.PLAYING, 0);
         } else if (row == 1) {
+            if (screen == Screen.TITLE) {
+                show(Screen.CONNECT, 0);
+            } else if (clientSession) {
+                networkAction = NetworkAction.DISCONNECT;
+            } else {
+                networkAction = NetworkAction.HOST;
+                networkMessage("Abrindo LAN...");
+            }
+        } else if (row == 2) {
             settingsFrom = screen;
             show(Screen.SETTINGS, 0);
         } else {

@@ -11,7 +11,8 @@ final class Inventory {
         AXE("Machado", false), LIGHTER("Isqueiro", false), MACHETE("Facão", false), BOW("Arco", false),
         ARROW("Flecha", true), STONE("Pedra", true), TORCH("Tocha", true), LOG("Tora", true),
         STICK("Graveto", true), FIBER("Fibra seca", true), DYNAMITE("Dinamite", true),
-        CAMPFIRE("Fogueira", true);
+        CAMPFIRE("Fogueira", true), RAW_BEEF("Carne bovina crua", true),
+        COOKED_BEEF("Carne bovina cozida", true);
 
         final String label;
         final boolean stackable;
@@ -58,6 +59,13 @@ final class Inventory {
         items[emptySlot] = item;
         counts[emptySlot] = 1;
         return true;
+    }
+
+    boolean canAdd(Item item) {
+        for (int slot = 0; slot < CAPACITY; slot++) {
+            if (items[slot] == null || items[slot] == item && item.stackable && counts[slot] < STACK_LIMIT) return true;
+        }
+        return false;
     }
 
     void select(int slot) {

@@ -13,6 +13,8 @@ final class Projectiles {
     private final Vector3f segment = new Vector3f();
     private final Vector3f previewPoint = new Vector3f();
     private final Vector3f previewVelocity = new Vector3f();
+    private final Vector3f shotStart = new Vector3f();
+    private final Vector3f shotPath = new Vector3f();
     private int nextSlot;
 
     Projectiles() {
@@ -20,6 +22,10 @@ final class Projectiles {
     }
 
     void launch(Inventory.Item item, Vector3f eye, Vector3f aim, float speed) {
+        launch(item, eye, aim, speed, false);
+    }
+
+    void launch(Inventory.Item item, Vector3f eye, Vector3f aim, float speed, boolean remote) {
         Shot shot = shots[nextSlot];
         nextSlot = (nextSlot + 1) % shots.length;
         shot.item = item;
@@ -28,23 +34,37 @@ final class Projectiles {
         shot.direction.set(aim);
         shot.age = 0.0f;
         shot.stuck = false;
+        shot.remote = remote;
     }
 
-    boolean update(float delta, Forest forest, Vector3f player, Inventory inventory, SoundEffect impact) {
+    boolean update(float delta, Forest forest, Vector3f player, Inventory inventory, SoundEffect impact,
+                   Ranch ranch, boolean authority) {
         boolean picked = false;
         for (Shot shot : shots) {
             if (shot.item == null) continue;
             shot.age += delta;
             if (shot.stuck) {
+                if (shot.remote) {
+                    if (shot.age > 12.0f) shot.item = null;
+                    continue;
+                }
                 float dx = player.x - shot.point.x;
                 float dz = player.z - shot.point.z;
-                if (shot.age > 0.65f && dx * dx + dz * dz < 0.58f * 0.58f
+                if (inventory != null && shot.age > 0.65f && dx * dx + dz * dz < 0.58f * 0.58f
                         && Math.abs(player.y - shot.point.y) < 2.0f && inventory.add(shot.item)) {
                     shot.item = null;
                     picked = true;
                 }
             } else {
-                if (advance(shot.point, shot.velocity, delta, forest)) {
+                shotStart.set(shot.point);
+                boolean collided = advance(shot.point, shot.velocity, delta, forest);
+                shotPath.set(shot.point).sub(shotStart);
+                float length = shotPath.length();
+                if (length > .0001f && ranch.hitRay(shotStart, shotPath.div(length), length,
+                        shot.item == Inventory.Item.ARROW ? 39 : 14, authority)) {
+                    shot.item = null;
+                    impact.play();
+                } else if (collided) {
                     shot.stuck = true;
                     impact.play();
                 } else {
@@ -123,7 +143,7 @@ final class Projectiles {
         final Vector3f velocity = new Vector3f();
         final Vector3f direction = new Vector3f();
         Inventory.Item item;
-        boolean stuck;
+        boolean stuck, remote;
         float age;
     }
 }
