@@ -14,6 +14,9 @@ final class FirstPersonCamera {
     static final float CROUCH_DROP = 0.43f;
     private final Vector3f position = new Vector3f(0.18f, EYE_HEIGHT, 4.65f);
     private final Vector3f direction = new Vector3f();
+    private final Vector3f renderEye = new Vector3f();
+    private final Vector3f renderAim = new Vector3f();
+    private int perspective;
     private float yaw;
     private float pitch = -0.085f;
     private boolean captured;
@@ -52,6 +55,8 @@ final class FirstPersonCamera {
             if (menu.visible() || key == GLFW_KEY_ESCAPE || key == GLFW_KEY_E) {
                 menu.key(key, action);
                 syncCursor(handle, menu);
+            } else if (action == GLFW_PRESS && key == GLFW_KEY_F5) {
+                cyclePerspective();
             } else if (action == GLFW_PRESS && key >= GLFW_KEY_1 && key <= GLFW_KEY_7) {
                 inventory.select(key - GLFW_KEY_1);
             }
@@ -195,6 +200,34 @@ final class FirstPersonCamera {
                 -(float) Math.cos(yaw) * horizontal);
         matrix.identity().lookAlong(direction.x, direction.y, direction.z, 0.0f, 1.0f, 0.0f)
                 .translate(-position.x, -position.y, -position.z);
+    }
+
+    void cyclePerspective() { perspective = (perspective + 1) % 3; }
+
+    boolean thirdPerson() { return perspective != 0; }
+    boolean frontView() { return perspective == 2; }
+    Vector3f renderEye() { return renderEye; }
+    Vector3f renderAim() { return renderAim; }
+
+    void perspectiveView(Matrix4f matrix, Forest forest) {
+        view(matrix);
+        renderEye.set(position);
+        renderAim.set(direction);
+        if (!thirdPerson()) return;
+        float sign = frontView() ? 1 : -1;
+        // Sweep the camera boom, stopping before terrain or a solid trunk.
+        float distance = 0;
+        for (float d = .1f; d <= 3.2f; d += .1f) {
+            float x = position.x + direction.x * sign * d;
+            float y = position.y + direction.y * sign * d;
+            float z = position.z + direction.z * sign * d;
+            if (y < Terrain.height(x, z) + .18f || forest.blocksPlayer(x, z)) break;
+            distance = d;
+        }
+        renderEye.fma(sign * distance, direction);
+        if (frontView()) renderAim.negate();
+        matrix.identity().lookAlong(renderAim, new Vector3f(0, 1, 0))
+                .translate(-renderEye.x, -renderEye.y, -renderEye.z);
     }
 
     Vector3f position() {

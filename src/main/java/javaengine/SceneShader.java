@@ -19,7 +19,6 @@ final class SceneShader implements AutoCloseable {
             uniform mat4 model;
             uniform bool skinned;
             uniform mat4 bones[%d];
-            uniform vec3 clayTint;
             uniform int vegetation;
             uniform float plantHeight;
             uniform float windTime;
@@ -73,7 +72,7 @@ final class SceneShader implements AutoCloseable {
                 gl_Position = viewProjection * world;
                 worldPosition = world.xyz;
                 worldNormal = transpose(inverse(mat3(model))) * surfaceNormal;
-                surfaceColor = skinned ? clayTint * color : color;
+                surfaceColor = color;
                 viewDepth = gl_Position.w;
                 bladeGrowth = growth;
                 patchPosition = position.xz;
@@ -101,6 +100,7 @@ final class SceneShader implements AutoCloseable {
             uniform vec4 blastMarks[8];
             uniform int blastMarkCount;
             out vec4 fragment;
+
             void main() {
                 vec3 color = surfaceColor;
                 if (vegetation == 1 && bladeGrowth < 0.0) {
@@ -171,7 +171,7 @@ final class SceneShader implements AutoCloseable {
     private final int opacity;
     private final int blastMarks;
     private final int blastMarkCount;
-    private final int skinned, bones, clayTint;
+    private final int skinned, bones;
 
     SceneShader() {
         program = link(VERTEX, FRAGMENT);
@@ -196,7 +196,6 @@ final class SceneShader implements AutoCloseable {
         blastMarkCount = glGetUniformLocation(program, "blastMarkCount");
         skinned = glGetUniformLocation(program, "skinned");
         bones = glGetUniformLocation(program, "bones[0]");
-        clayTint = glGetUniformLocation(program, "clayTint");
     }
 
     static int link(String vertexSource, String fragmentSource) {
@@ -273,10 +272,9 @@ final class SceneShader implements AutoCloseable {
         draw(mesh, matrix, isDisplay, 0.0f, false, 0, 1.0f, 1.0f, buffer);
     }
 
-    void drawClay(ObjModel mesh, Matrix4f matrix, float[] skeleton, int tint, FloatBuffer buffer) {
+    void drawSkinned(ObjModel mesh, Matrix4f matrix, float[] skeleton, FloatBuffer buffer) {
         glUniform1i(skinned, 1);
         glUniformMatrix4fv(bones, false, skeleton);
-        glUniform3f(clayTint, ((tint >> 16) & 255) / 255f, ((tint >> 8) & 255) / 255f, (tint & 255) / 255f);
         draw(mesh, matrix, false, 0, false, 0, 1, 1, buffer);
         glUniform1i(skinned, 0);
     }

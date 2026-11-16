@@ -6,9 +6,9 @@ import org.joml.Vector3f;
 import java.nio.FloatBuffer;
 
 final class Bow {
-    private static final float DRAW_TIME = 0.81f;
+    static final float DRAW_TIME = 0.81f;
     private static final float AIM_FOV = (float) Math.toRadians(40.0);
-    private static final float RECOVERY_TIME = 0.29f;
+    static final float RECOVERY_TIME = 0.29f;
     private final Matrix4f body = new Matrix4f();
     private final Matrix4f piece = new Matrix4f();
     private final Vector3f lower = new Vector3f();
@@ -21,6 +21,7 @@ final class Bow {
     private float recovery;
     private float aimProgress;
     private float shotPower;
+    private float releasedDraw;
 
     boolean press(Inventory inventory) {
         if (!drawing && recovery == 0.0f && inventory.total(Inventory.Item.ARROW) > 0) {
@@ -46,6 +47,7 @@ final class Bow {
         recovery = Math.max(0.0f, recovery - delta);
         if (released) {
             if (inventory.take(Inventory.Item.ARROW)) {
+                releasedDraw = drawAmount(charge);
                 launchedSpeed = speed();
                 shots.launch(Inventory.Item.ARROW, eye, aim, launchedSpeed);
                 shotPower = 0.36f + 0.64f * charge;
@@ -93,18 +95,35 @@ final class Bow {
         return shotPower * (float) Math.sin(progress * 8.0f + 0.9f) * (1.0f - progress) * (1.0f - progress);
     }
 
+    static float drawAmount(float charge) {
+        return smooth(Math.clamp(charge, 0, 1));
+    }
+
+    static float stringFlex(float releasedDraw, float elapsed) {
+        if (elapsed < .035f) return releasedDraw * (1 - smooth(elapsed / .035f));
+        float ring = elapsed - .035f;
+        return -.07f * releasedDraw * (float) (Math.sin(ring * 90) * Math.exp(-ring * 29));
+    }
+
+    static float nockDepth(float flex) { return .157f + flex * .235f; }
+
     private static float smooth(float t) { return t * t * (3.0f - 2.0f * t); }
 
     void draw(SceneShader shader, ObjModel bow, ObjModel string, ObjModel arrow, float aspect, FloatBuffer buffer) {
-        float draw = smooth(charge);
+        float draw = recovery > 0 ? stringFlex(releasedDraw, RECOVERY_TIME - recovery) : drawAmount(charge);
         float aim = aimAmount();
         float kick = kick();
-        float tension = drawing ? (float) Math.sin(charge * 35.0f) * draw * 0.006f : 0.0f;
+        float tension = drawing ? (float) Math.sin(charge * 23.0f) * draw * 0.003f : 0.0f;
+        float raise = drawing ? AvatarMotion.smooth(0, .28f, charge) : 0;
+        float follow = AvatarMotion.smooth(0, RECOVERY_TIME, recovery);
+        raise = Math.max(raise, follow);
+        float breath = (float) Math.sin(org.lwjgl.glfw.GLFW.glfwGetTime() * 2.3) * .003f * (1 - .85f * Math.max(aim, raise));
         body.translation((0.177f - 0.059f * aim - 0.021f * draw) * aspect,
-                        -0.30f + aim * 0.16f + draw * 0.043f + kick * 0.055f,
+                        -0.30f + aim * 0.16f + raise * .064f + breath + kick * .029f,
                         -0.76f + aim * 0.042f - kick * 0.055f)
                 .rotateY(0.19f - aim * 0.07f + tension)
-                .rotateZ(-kick * 0.055f)
+                .rotateX(-kick * .045f)
+                .rotateZ(.07f * (1 - Math.max(aim, raise)) - kick * .036f)
                 .scale(0.74f * Math.min(1.0f, aspect))
                 .scale(1.0f, -1.0f, 1.0f);
         shader.drawBow(bow, body, draw, buffer);
@@ -112,7 +131,7 @@ final class Bow {
         float tipDepth = 0.157f + draw * 0.065f;
         body.transformPosition(0.0f, -limb, tipDepth, lower);
         body.transformPosition(0.0f, limb, tipDepth, upper);
-        body.transformPosition(0.0f, 0.0f, 0.157f + draw * 0.235f, nock);
+        body.transformPosition(0.0f, 0.0f, nockDepth(draw), nock);
         string(shader, string, lower, nock, buffer);
         string(shader, string, nock, upper, buffer);
         if (drawing) {

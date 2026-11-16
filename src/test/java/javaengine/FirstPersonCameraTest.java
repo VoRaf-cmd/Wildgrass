@@ -5,6 +5,42 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 final class FirstPersonCameraTest {
+    @Test void perspectivesCycleWithoutChangingGameplayAimOrPosition() {
+        var camera = new FirstPersonCamera();
+        var forest = new Forest();
+        camera.spawnAt(4, 3);
+        var matrix = new org.joml.Matrix4f();
+        camera.perspectiveView(matrix, forest);
+        var originalPosition = new org.joml.Vector3f(camera.position());
+        var originalAim = new org.joml.Vector3f(camera.aim());
+        assertFalse(camera.thirdPerson());
+        camera.cyclePerspective();
+        camera.perspectiveView(matrix, forest);
+        assertTrue(camera.thirdPerson());
+        assertFalse(camera.frontView());
+        assertTrue(new org.joml.Vector3f(camera.renderEye()).sub(originalPosition).dot(originalAim) < 0);
+        camera.cyclePerspective();
+        camera.perspectiveView(matrix, forest);
+        assertTrue(camera.frontView());
+        assertTrue(camera.renderAim().dot(originalAim) < -.99f);
+        assertEquals(originalPosition, camera.position());
+        assertEquals(originalAim, camera.aim());
+        camera.cyclePerspective();
+        camera.perspectiveView(matrix, forest);
+        assertFalse(camera.thirdPerson());
+        assertEquals(originalPosition, camera.renderEye());
+    }
+
+    @Test void frontCameraStopsBeforeTreeTrunk() {
+        var camera = new FirstPersonCamera();
+        camera.spawnAt(0, 2);
+        camera.cyclePerspective();
+        camera.cyclePerspective();
+        camera.perspectiveView(new org.joml.Matrix4f(), new Forest());
+        assertTrue(camera.renderEye().distance(camera.position()) < 2);
+        assertTrue(camera.renderEye().z > 0);
+    }
+
     @Test void crouchLowersTheViewAndTakesPriorityOverSprint() {
         var camera = new FirstPersonCamera();
         var forest = new Forest();
